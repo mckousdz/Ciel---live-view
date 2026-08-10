@@ -3,23 +3,23 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Observatoire Céleste - Mode Enfant & Pro</title>
+    <title>Observatoire Céleste</title>
     
     <!-- D3-Celestial CSS -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/d3-celestial/0.7.32/celestial.css">
     
-    <!-- D3.js v4 (Impératif pour la compatibilité de d3-celestial) -->
+    <!-- D3.js v4 -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/4.13.0/d3.min.js"></script>
     <!-- D3-Celestial JS -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/d3-celestial/0.7.32/celestial.min.js"></script>
     
-    <!-- Satellite.js pour le calcul orbital de l'ISS -->
+    <!-- Satellite.js -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/satellite.js/4.0.0/satellite.min.js"></script>
 
     <style>
         body, html {
             margin: 0; padding: 0; width: 100%; height: 100%;
-            background: #000005; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: #000005; font-family: -apple-system, BlinkMacSystemFont, sans-serif;
             overflow: hidden; color: #fff;
         }
         #celestial-map { width: 100%; height: 100%; position: absolute; top: 0; left: 0; }
@@ -30,24 +30,21 @@
             z-index: 10; pointer-events: none;
         }
         .badge {
-            background: rgba(10, 10, 30, 0.8); backdrop-filter: blur(10px);
+            background: rgba(10, 10, 30, 0.85); backdrop-filter: blur(10px);
             border: 1px solid rgba(255, 255, 255, 0.15); padding: 8px 16px;
-            border-radius: 20px; font-size: 0.9rem; font-weight: 600;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.5); pointer-events: auto;
+            border-radius: 20px; font-size: 0.9rem; font-weight: 600; pointer-events: auto;
         }
         .btn-action {
             background: #ff4757; color: white; border: none; padding: 10px 18px;
             border-radius: 20px; font-weight: bold; cursor: pointer; pointer-events: auto;
-            box-shadow: 0 4px 15px rgba(255, 71, 87, 0.4); transition: transform 0.2s;
+            box-shadow: 0 4px 15px rgba(255, 71, 87, 0.4);
         }
-        .btn-action:active { transform: scale(0.95); }
 
         #kids-info {
             position: absolute; bottom: 20px; left: 20px; right: 20px;
-            background: rgba(15, 15, 35, 0.9); backdrop-filter: blur(12px);
+            background: rgba(15, 15, 35, 0.95); backdrop-filter: blur(12px);
             border: 1px solid rgba(255, 255, 255, 0.2); padding: 15px 20px;
             border-radius: 20px; z-index: 10; display: none; text-align: center;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.7);
         }
         #kids-info h3 { margin: 0 0 5px 0; color: #ff6b81; font-size: 1.1rem; }
         #kids-info p { margin: 0; font-size: 0.95rem; color: #dcdde1; }
@@ -69,31 +66,33 @@
 
     <div id="loader">
         <div class="spinner"></div>
-        <span>Alignement des étoiles et géolocalisation...</span>
+        <span>Chargement du ciel étoilé...</span>
     </div>
 
     <div class="ui-header">
-        <div class="badge" id="location-badge">📍 Recherche...</div>
+        <div class="badge" id="location-badge">📍 GPS en cours...</div>
         <button class="btn-action" onclick="toggleKidsMode()">🧸 Mode Magique</button>
     </div>
 
+    <!-- Conteneur obligatoire pour d3-celestial -->
     <div id="celestial-map"></div>
 
     <div id="kids-info">
-        <h3 id="kids-title">✨ Le Train de l'Espace (ISS)</h3>
-        <p id="kids-desc">La station spatiale voyage au-dessus des étoiles à 28 000 km/h !</p>
+        <h3>✨ Le Train de l'Espace (ISS)</h3>
+        <p>La station spatiale voyage au-dessus des étoiles à 28 000 km/h !</p>
     </div>
 
     <script>
+        // Configuration explicite avec dimensions dynamiques de l'écran
         var config = {
-            width: 0,
-            height: 0,
+            width: window.innerWidth,
+            height: window.innerHeight,
             projection: "stereographic",
             transform: "equatorial",
             form: false,
             interactive: true,
             location: true,
-            datapath: "https://ofrohn.github.io/data/", // Indique où récupérer les données des constellations en ligne
+            datapath: "https://ofrohn.github.io/data/",
             geopos: [48.8566, 2.3522],
             background: { fill: "#000005", stroke: "#000000", opacity: 1 },
             stars: {
@@ -112,55 +111,51 @@
                 names: true,
                 desg: true,
                 lines: true,
-                style: { stroke: "#3742fa", width: 1, opacity: 0.5 },
+                style: { stroke: "#3742fa", width: 1, opacity: 0.6 },
                 nameStyle: { fill: "#70a1ff", font: "12px sans-serif", align: "center", baseline: "middle" }
             },
             lines: {
                 show: true,
-                eqpos: false, ecliptic: false, galactic: false,
-                graticule: false
+                eqpos: false, ecliptic: false, galactic: false, graticule: false
             },
             advanced: function() {
                 setContainerCustomDraw();
             }
         };
 
-        let userLat = 48.8566;
-        let userLon = 2.3522;
         let issSatRec = null;
 
+        // Géolocalisation avec repli automatique si refusée/indisponible
         if ("geolocation" in navigator) {
             navigator.geolocation.getCurrentPosition(
                 (position) => {
-                    userLat = position.coords.latitude;
-                    userLon = position.coords.longitude;
-                    document.getElementById("location-badge").innerText = `📍 ${userLat.toFixed(2)}°, ${userLon.toFixed(2)}°`;
-                    initSky(userLat, userLon);
+                    config.geopos = [position.coords.latitude, position.coords.longitude];
+                    document.getElementById("location-badge").innerText = `📍 Position active`;
+                    startApp();
                 },
                 (error) => {
-                    document.getElementById("location-badge").innerText = `📍 Mode par défaut (Paris)`;
-                    initSky(userLat, userLon);
+                    document.getElementById("location-badge").innerText = `📍 Mode standard`;
+                    startApp();
                 },
-                { timeout: 10000 }
+                { timeout: 7000 }
             );
         } else {
-            initSky(userLat, userLon);
+            startApp();
         }
 
-        function initSky(lat, lon) {
-            config.geopos = [lat, lon];
-            
+        function startApp() {
             try {
                 Celestial.display(config);
             } catch(e) {
-                console.error("Erreur d'affichage de la carte:", e);
+                console.error("Erreur critique d'affichage:", e);
             }
-            
-            // Masquer le loader après chargement
+
+            // Disparition du loader
             setTimeout(() => {
-                document.getElementById("loader").style.opacity = 0;
-                setTimeout(() => document.getElementById("loader").style.display = "none", 500);
-            }, 1500);
+                let loader = document.getElementById("loader");
+                loader.style.opacity = 0;
+                setTimeout(() => loader.style.display = "none", 400);
+            }, 1200);
 
             fetchISSData();
             setInterval(updateISSPosition, 5000);
@@ -175,26 +170,23 @@
                     issSatRec = satellite.twoline2satrec(lines[lines.length - 2].trim(), lines[lines.length - 1].trim());
                 }
             } catch (e) {
-                console.log("Erreur de récupération TLE ISS.");
+                console.log("Erreur TLE ISS");
             }
         }
 
         function setContainerCustomDraw() {
             Celestial.add({
                 type: "svg",
-                callback: function(error, json) {
-                    if (error) return;
-                },
                 redraw: function() {
                     if (!issSatRec) return;
                     
                     const now = new Date();
-                    const positionAndVelocity = satellite.propagate(issSatRec, now);
+                    const pv = satellite.propagate(issSatRec, now);
                     const gmst = satellite.gstime(now);
-                    const positionGd = satellite.eciToGeodetic(positionAndVelocity.position, gmst);
+                    const gd = satellite.eciToGeodetic(pv.position, gmst);
                     
-                    const satLat = satellite.degreesLat(positionGd.latitude);
-                    const satLon = satellite.degreesLong(positionGd.longitude);
+                    const satLat = satellite.degreesLat(gd.latitude);
+                    const satLon = satellite.degreesLong(gd.longitude);
                     
                     const xy = Celestial.mapProjection([satLon, satLat]);
                     
@@ -207,18 +199,18 @@
                         g.append("circle")
                          .attr("cx", xy[0])
                          .attr("cy", xy[1])
-                         .attr("r", 8)
+                         .attr("r", 9)
                          .attr("fill", "#ff4757")
                          .attr("stroke", "#ffffff")
                          .attr("stroke-width", 2);
 
                         g.append("text")
-                         .attr("x", xy[0] + 12)
+                         .attr("x", xy[0] + 14)
                          .attr("y", xy[1] + 4)
                          .attr("fill", "#ff6b81")
-                         .attr("font-size", "12px")
+                         .attr("font-size", "13px")
                          .attr("font-weight", "bold")
-                         .text("🚀 ISS (Train de l'Espace)");
+                         .text("🚀 ISS");
                     }
                 }
             });
@@ -233,17 +225,23 @@
         let kidsModeActive = false;
         function toggleKidsMode() {
             kidsModeActive = !kidsModeActive;
-            const infoBox = document.getElementById("kids-info");
-            infoBox.style.display = kidsModeActive ? "block" : "none";
+            document.getElementById("kids-info").style.display = kidsModeActive ? "block" : "none";
 
             if (kidsModeActive && 'speechSynthesis' in window) {
-                const text = "Regarde bien l'écran ! Le train magique de l'espace, la station spatiale internationale, traverse les constellations en direct au-dessus de nous.";
-                const utterance = new SpeechSynthesisUtterance(text);
+                const utterance = new SpeechSynthesisUtterance("Regarde bien l'écran ! Le train magique de l'espace traverse les étoiles juste au-dessus de nous.");
                 utterance.lang = 'fr-FR';
                 utterance.pitch = 1.3;
                 window.speechSynthesis.speak(utterance);
             }
         }
+
+        // Ajustement automatique si rotation de la tablette/téléphone
+        window.addEventListener('resize', () => {
+            if (typeof Celestial !== 'undefined' && Celestial.resize) {
+                Celestial.resize({width: window.innerWidth, height: window.innerHeight});
+                Celestial.redraw();
+            }
+        });
     </script>
 </body>
 </html>
