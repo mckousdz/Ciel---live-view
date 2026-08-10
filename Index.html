@@ -1,1 +1,160 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>StellarKids - Mon Observatoire</title>
+    <style>
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #000; font-family: 'Comic Sans MS', cursive, sans-serif; touch-action: none; }
+        #canvas-container { width: 100%; height: 100%; position: absolute; top: 0; left: 0; }
+        
+        .ui-overlay { position: absolute; top: 20px; left: 20px; right: 20px; z-index: 10; color: white; display: flex; justify-content: space-between; align-items: center; pointer-events: none; }
+        h1 { font-size: 1.2rem; text-shadow: 0 2px 4px rgba(0,0,0,0.8); margin: 0; background: rgba(0,0,0,0.5); padding: 8px 15px; border-radius: 20px; }
+        
+        .kids-btn { pointer-events: auto; background: #ff7675; border: none; padding: 10px 18px; color: white; font-size: 1rem; border-radius: 30px; cursor: pointer; box-shadow: 0 4px 0 #d63031; font-weight: bold; transition: transform 0.1s; }
+        .kids-btn:active { transform: translateY(4px); box-shadow: 0 0 0 #d63031; }
+
+        /* Bulle d'histoire pour l'enfant */
+        #story-bubble { position: absolute; bottom: 30px; left: 20px; right: 20px; background: rgba(255, 255, 255, 0.9); color: #2d3436; padding: 15px; border-radius: 20px; font-size: 1.1rem; text-align: center; box-shadow: 0 5px 15px rgba(0,0,0,0.5); z-index: 20; display: none; }
+        #story-bubble span { display: block; font-size: 1.5rem; margin-bottom: 5px; }
+
+        /* Message géolocalisation */
+        #geo-status { position: absolute; bottom: 10px; width: 100%; text-align: center; color: rgba(255,255,255,0.6); font-size: 0.8rem; z-index: 10; pointer-events: none; }
+    </style>
+</head>
+<body>
+
+    <div class="ui-overlay">
+        <h1>✨ Mon Ciel Étoilé</h1>
+        <button class="kids-btn" onclick="toggleKidsStory()">🐻 Mode Histoire</button>
+    </div>
+
+    <div id="canvas-container"></div>
+
+    <div id="story-bubble">
+        <span id="story-emoji">🐻</span>
+        <p id="story-text">Regarde bien le ciel ! La grande ourse protège les petites étoiles...</p>
+    </div>
+
+    <div id="geo-status">Recherche de ta position sous les étoiles...</div>
+
+    <!-- Moteur 3D Three.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        // 1. Initialisation de la scène 3D
+        const container = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        container.appendChild(renderer.domElement);
+
+        // 2. Création de la voûte céleste (Étoiles scintillantes)
+        const starsGeometry = new THREE.BufferGeometry();
+        const starsCount = 1500;
+        const posArray = new Float32Array(starsCount * 3);
+
+        for(let i = 0; i < starsCount * 3; i++) {
+            posArray[i] = (Math.random() - 0.5) * 300;
+        }
+
+        starsGeometry.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
+        const starsMaterial = new THREE.PointsMaterial({size: 1.2, color: 0xffffff, transparent: true, opacity: 0.8});
+        const starsMesh = new THREE.Points(starsGeometry, starsMaterial);
+        scene.add(starsMesh);
+
+        // Ajout d'une "Fusée / Train Magique" (ISS simulée pour l'enfant)
+        const rocketGeo = new THREE.SphereGeometry(1.5, 16, 16);
+        const rocketMat = new THREE.MeshBasicMaterial({color: 0xff4757});
+        const rocketMesh = new THREE.Mesh(rocketGeo, rocketMat);
+        rocketMesh.position.set(20, 10, -50);
+        scene.add(rocketMesh);
+
+        camera.position.z = 0;
+
+        // 3. Gestion tactile (Permet à l'enfant ou toi de tourner dans le ciel avec le doigt)
+        let isDragging = false;
+        let previousMousePosition = { x: 0, y: 0 };
+
+        document.addEventListener('pointerdown', (e) => {
+            isDragging = true;
+            previousMousePosition = { x: e.clientX, y: e.clientY };
+        });
+
+        document.addEventListener('pointermove', (e) => {
+            if (!isDragging) return;
+            const deltaX = e.clientX - previousMousePosition.x;
+            const deltaY = e.clientY - previousMousePosition.y;
+
+            starsMesh.rotation.y += deltaX * 0.005;
+            starsMesh.rotation.x += deltaY * 0.005;
+            rocketMesh.rotation.y += deltaX * 0.005;
+
+            previousMousePosition = { x: e.clientX, y: e.clientY };
+        });
+
+        document.addEventListener('pointerup', () => { isDragging = false; });
+
+        // 4. Boucle d'animation fluide
+        function animate() {
+            requestAnimationFrame(animate);
+            // Rotation lente et magique du ciel
+            starsMesh.rotation.y += 0.0003;
+            // Déplacement du train magique de l'espace
+            rocketMesh.position.x = Math.sin(Date.now() * 0.001) * 40;
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        // Gestion du redimensionnement écran
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // 5. Géolocalisation réelle du navigateur
+        if ('geolocation' in navigator) {
+            navigator.geolocation.getCurrentPosition((position) => {
+                document.getElementById('geo-status').innerText = `Position connectée aux étoiles 🌍`;
+            }, () => {
+                document.getElementById('geo-status').innerText = `Mode universel activé ✨`;
+            });
+        }
+
+        // 6. Mode Histoire Interactif pour l'enfant (4 ans)
+        let storyIndex = 0;
+        const stories = [
+            { emoji: "🐻", text: "Tu vois là-haut ? C'est la Grande Ourse, une maman douce qui veille sur nous." },
+            { emoji: "🚀", text: "Wouhou ! Regarde le petit train de l'espace qui traverse les étoiles en rigolant !" },
+            { emoji: "⭐", text: "Si tu touches l'écran et glisses ton doigt, tu peux faire danser le ciel tout entier !" }
+        ];
+
+        function toggleKidsStory() {
+            const bubble = document.getElementById('story-bubble');
+            const emojiEl = document.getElementById('story-emoji');
+            const textEl = document.getElementById('story-text');
+
+            if (bubble.style.display === 'block') {
+                storyIndex = (storyIndex + 1) % stories.length;
+            } else {
+                bubble.style.display = 'block';
+            }
+
+            emojiEl.innerText = stories[storyIndex].emoji;
+            textEl.innerText = stories[storyIndex].text;
+
+            // Synthèse vocale magique (si le téléphone le supporte)
+            if ('speechSynthesis' in window) {
+                const utterance = new SpeechSynthesisUtterance(stories[storyIndex].text);
+                utterance.lang = 'fr-FR';
+                utterance.pitch = 1.4; // Voix plus aiguë et amusante pour un enfant
+                window.speechSynthesis.speak(utterance);
+            }
+        }
+    </script>
+</body>
+</html>
 
