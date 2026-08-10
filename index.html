@@ -1,19 +1,485 @@
-<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no"><meta name="theme-color" content="#030512"><title>Petit Explorateur du Ciel V2</title><style>
-:root{--g:rgba(7,13,37,.78);--l:rgba(255,255,255,.14);--t:#f7f9ff;--m:#aeb9d9;--y:#ffd86b}*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}html,body{margin:0;height:100%;overflow:hidden;background:#030512;color:var(--t);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}body{touch-action:none}#sky{position:fixed;inset:0;width:100%;height:100%;background:radial-gradient(circle at 50% 42%,#121c49,#080d27 45%,#010208 100%)}.top{position:fixed;z-index:3;top:0;left:0;right:0;padding:max(12px,env(safe-area-inset-top)) 14px 8px;display:flex;justify-content:space-between;text-shadow:0 2px 14px #000;pointer-events:none}.brand{font-size:18px;font-weight:900}.status{font-size:12px;color:var(--m);text-align:right}.bottom{position:fixed;z-index:4;left:8px;right:8px;bottom:max(8px,env(safe-area-inset-bottom));display:flex;gap:7px;justify-content:center;flex-wrap:wrap}button{color:var(--t);background:var(--g);border:1px solid var(--l);border-radius:17px;padding:11px 12px;font-size:13px;font-weight:800;backdrop-filter:blur(16px);box-shadow:0 8px 30px #0005}button:active{transform:scale(.96)}.primary{border:0;background:linear-gradient(135deg,#566aff,#7757ff)}.gold{color:var(--y);border-color:#ffd86b55}.card{display:none;position:fixed;z-index:8;left:50%;top:50%;transform:translate(-50%,-50%);width:min(90vw,410px);max-height:76vh;overflow:auto;padding:20px;border:1px solid var(--l);border-radius:27px;background:#040819f5;box-shadow:0 24px 90px #000}.card.show{display:block}.close{float:right;padding:7px 10px;border-radius:12px}.card h2{margin:0 42px 8px 0;font-size:24px}.card p{color:var(--m);line-height:1.48}.badge{display:inline-block;padding:6px 9px;border-radius:999px;background:#ffd86b1f;color:var(--y);font-size:11px;font-weight:900;margin:3px}.item{padding:11px 12px;margin:7px 0;border-radius:16px;background:#ffffff09;border:1px solid #ffffff12}.item b{display:block}.item span{font-size:12px;color:var(--m)}.row{display:flex;gap:8px;margin-top:12px}.row button{flex:1}#mission{display:none;position:fixed;z-index:5;top:68px;left:50%;transform:translateX(-50%);width:min(92vw,430px);text-align:center;padding:12px 15px;border-radius:20px;background:var(--g);border:1px solid var(--l);backdrop-filter:blur(15px)}#mission.show{display:block}.missionTitle{font-weight:900}.missionText{font-size:12px;color:var(--m);margin-top:3px}#toast{position:fixed;z-index:12;left:50%;bottom:108px;transform:translateX(-50%) translateY(15px);opacity:0;background:#fff;color:#111;padding:11px 16px;border-radius:999px;font-weight:900;transition:.25s;max-width:90vw;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}#toast.show{opacity:1;transform:translateX(-50%)}#cross{position:fixed;z-index:2;left:50%;top:50%;width:60px;height:60px;transform:translate(-50%,-50%);border:1px solid #fff3;border-radius:50%;pointer-events:none}#cross:before,#cross:after{content:"";position:absolute;background:#fff3}#cross:before{width:1px;height:74px;left:29px;top:-8px}#cross:after{height:1px;width:74px;left:-8px;top:29px}</style></head><body>
-<canvas id="sky"></canvas><div id="cross"></div><div class="top"><div class="brand">🌌 Petit Explorateur</div><div class="status">V2 • ciel réel<br><span id="clock"></span></div></div><div id="mission"><div class="missionTitle">🎮 Mission du soir</div><div class="missionText" id="missionText">Trouve Sirius !</div></div>
-<div class="bottom"><button class="primary" id="locate">📍 Position</button><button id="orient">🧭 Boussole</button><button class="gold" id="planetsBtn">🪐 Planètes</button><button id="satBtn">🛰️ Satellites</button><button id="missionBtn">🎮 Mission</button><button id="bookBtn">🏆 Carnet</button></div>
-<div class="card" id="card"><button class="close" id="close">✕</button><h2 id="title"></h2><p id="text"></p><div id="body"></div><div class="row"><button id="speak">🔊 Écouter</button><button id="close2">Continuer</button></div></div><div id="toast"></div>
-<script src="https://cdn.jsdelivr.net/npm/satellite.js@6.0.2/dist/satellite.min.js"></script><script src="https://cdn.jsdelivr.net/npm/astronomy-engine@2.1.19/astronomy.browser.min.js"></script><script>
-const c=document.getElementById('sky'),x=c.getContext('2d');let W,H,D=1,lat=43.3,lon=5.37,hgt=0,head=0,located=false,oriented=false,showSat=false,sats=[],satOK=false,found=JSON.parse(localStorage.getItem('skyBook')||'[]');
-const S=[['Sirius',6.7525,-16.7161,-1.46,'🐕','Une des étoiles les plus brillantes du ciel.'],['Vega',18.6156,38.7837,.03,'🦅','Une étoile très brillante de la Lyre.'],['Betelgeuse',5.9195,7.4071,.5,'🏹','Une supergéante rouge dans Orion.'],['Rigel',5.2423,-8.2016,.13,'🏹','Une étoile bleue très brillante d’Orion.'],['Procyon',7.655,5.225,.34,'🐕','Une étoile brillante du Petit Chien.'],['Capella',5.2782,45.998,.08,'🐐','Une étoile brillante du Cocher.'],['Aldebaran',4.5987,16.509,.85,'🐂','L’œil orangé du Taureau.'],['Spica',13.4199,-11.1614,.98,'🌾','L’étoile principale de la Vierge.'],['Antares',16.4901,-26.4319,.96,'🦂','Une supergéante rouge du Scorpion.'],['Deneb',20.6905,45.2803,1.25,'🦢','Une étoile brillante du Cygne.'],['Altair',19.8464,8.8683,.77,'🦅','Une des trois étoiles du Triangle d’été.'],['Pollux',7.7553,28.0262,1.14,'👯','Une étoile des Gémeaux.'],['Regulus',10.1395,11.9672,1.35,'🦁','Le cœur du Lion.'],['Bellatrix',5.4189,6.3497,1.64,'🏹','Une étoile d’Orion.'],['Alnilam',5.6036,-1.2019,1.69,'🏹','Une étoile de la ceinture d’Orion.'],['Alnitak',5.6793,-1.9426,1.74,'🏹','Une étoile de la ceinture d’Orion.'],['Mintaka',5.5334,-.2991,2.23,'🏹','Une étoile de la ceinture d’Orion.']].map(a=>({n:a[0],ra:a[1],dec:a[2],m:a[3],i:a[4],f:a[5]}));
-const L=[['Betelgeuse','Bellatrix'],['Betelgeuse','Alnilam'],['Alnilam','Alnitak'],['Alnilam','Mintaka'],['Rigel','Mintaka'],['Betelgeuse','Rigel']];const P=[['Mercure','Mercury','☿️','La planète la plus proche du Soleil.'],['Vénus','Venus','♀️','Très brillante, parfois appelée étoile du berger.'],['Mars','Mars','♂️','La planète rouge.'],['Jupiter','Jupiter','♃','La plus grande planète du Système solaire.'],['Saturne','Saturn','🪐','La planète aux magnifiques anneaux.']];
-function resize(){D=Math.min(devicePixelRatio||1,2);W=innerWidth;H=innerHeight;c.width=W*D;c.height=H*D;c.style.width=W+'px';c.style.height=H+'px';x.setTransform(D,0,0,D,0,0)}addEventListener('resize',resize);resize();function rad(v){return v*Math.PI/180}function deg(v){return v*180/Math.PI}function jd(d){return d.getTime()/86400000+2440587.5}function lst(d){let T=(jd(d)-2451545)/36525,g=280.46061837+360.98564736629*(jd(d)-2451545)+.000387933*T*T-T*T*T/38710000;return((g+lon)%360+360)%360}function aa(s,d){let H=((lst(d)/15-s.ra+24)%24)*15,r=rad(H),dc=rad(s.dec),la=rad(lat),alt=Math.asin(Math.sin(dc)*Math.sin(la)+Math.cos(dc)*Math.cos(la)*Math.cos(r)),az=Math.atan2(-Math.sin(r)*Math.cos(dc),Math.sin(dc)*Math.cos(la)-Math.cos(dc)*Math.sin(la)*Math.cos(r));return{alt:deg(alt),az:(deg(az)+360)%360}}function pos(az,alt){let a=az-(oriented?head:0),r=(90-alt)/90*Math.min(W,H)*.46;return{x:W/2+Math.sin(rad(a))*r,y:H/2-Math.cos(rad(a))*r}}function paa(body,d){try{let o=new Astronomy.Observer(lat,lon,hgt),q=Astronomy.Equator(body,d,o,true,true);return Astronomy.Horizon(d,o,q.ra,q.dec,'normal')}catch(e){return null}}
-function satPos(s,d){try{let q=satellite.propagate(s.satrec,d);if(!q.position)return null;let ecf=satellite.eciToEcf(q.position,satellite.gstime(d)),o={longitude:rad(lon),latitude:rad(lat),height:hgt/1000},z=satellite.ecfToLookAngles(o,ecf);return{az:deg(z.azimuth),alt:deg(z.elevation),range:z.rangeSat}}catch(e){return null}}
-function draw(){x.clearRect(0,0,W,H);let g=x.createRadialGradient(W/2,H*.42,10,W/2,H*.42,Math.max(W,H)*.75);g.addColorStop(0,'#283d9122');g.addColorStop(1,'#0000');x.fillStyle=g;x.fillRect(0,0,W,H);let now=new Date(),pts=[];S.forEach(s=>{let a=aa(s,now);if(a.alt>-4){let q=pos(a.az,a.alt);pts.push({...s,...a,...q})}});x.strokeStyle='#73caff52';x.lineWidth=1.3;L.forEach(l=>{let A=pts.find(p=>p.n==l[0]),B=pts.find(p=>p.n==l[1]);if(A&&B){x.beginPath();x.moveTo(A.x,A.y);x.lineTo(B.x,B.y);x.stroke()}});pts.forEach(p=>{let z=Math.max(1.5,4.7-p.m*1.35);x.beginPath();x.arc(p.x,p.y,z+5,0,7);x.fillStyle='#ffe27a0c';x.fill();x.beginPath();x.arc(p.x,p.y,z,0,7);x.fillStyle=p.m<0?'#fff0a2':'#fff';x.shadowBlur=12;x.shadowColor='#fff';x.fill();x.shadowBlur=0;if(p.m<1.2){x.font='700 11px sans-serif';x.fillStyle='#ffffffc7';x.fillText(p.n,p.x+8,p.y-7)}});if(located)P.forEach(p=>{let a=paa(p[1],now);if(a&&a.alt>-3){let q=pos(a.az,a.alt);x.beginPath();x.arc(q.x,q.y,8,0,7);x.fillStyle='#ffd86b';x.shadowBlur=18;x.shadowColor='#ffd86b';x.fill();x.shadowBlur=0;x.font='800 11px sans-serif';x.fillStyle='#fff';x.fillText(p[0],q.x+11,q.y+4)}});if(showSat&&satOK)sats.forEach(s=>{let a=satPos(s,now);if(a&&a.alt>-2){let q=pos(a.az,a.alt);x.beginPath();x.arc(q.x,q.y,4,0,7);x.fillStyle='#7dffb2';x.shadowBlur=15;x.shadowColor='#7dffb2';x.fill();x.shadowBlur=0;x.font='800 9px sans-serif';x.fillStyle='#9cffc3';x.fillText(s.name,q.x+7,q.y-5)}});x.font='900 13px sans-serif';x.fillStyle='#ffffff8c';[['N',0],['E',90],['S',180],['O',270]].forEach(a=>{let r=Math.min(W,H)*.42,v=a[1]-(oriented?head:0);x.fillText(a[0],W/2+Math.sin(rad(v))*r-4,H/2-Math.cos(rad(v))*r+5)});requestAnimationFrame(draw)}draw();
-function toast(t){let e=document.getElementById('toast');e.textContent=t;e.classList.add('show');clearTimeout(window._t);window._t=setTimeout(()=>e.classList.remove('show'),2800)}function card(t,p,b=''){document.getElementById('title').textContent=t;document.getElementById('text').textContent=p;document.getElementById('body').innerHTML=b;document.getElementById('card').classList.add('show');window.speech=p}function close(){document.getElementById('card').classList.remove('show')}document.getElementById('close').onclick=close;document.getElementById('close2').onclick=close;document.getElementById('speak').onclick=()=>{if('speechSynthesis'in window){speechSynthesis.cancel();let u=new SpeechSynthesisUtterance(window.speech||'Bonjour petit astronome');u.lang='fr-FR';u.rate=.9;speechSynthesis.speak(u)}};
-document.getElementById('locate').onclick=()=>{if(!navigator.geolocation)return toast('La localisation n’est pas disponible.');toast('📍 Je cherche ta position…');navigator.geolocation.getCurrentPosition(p=>{lat=p.coords.latitude;lon=p.coords.longitude;hgt=p.coords.altitude||0;located=true;toast('✨ Position trouvée !')},()=>toast('Autorise la localisation dans Safari.'),{enableHighAccuracy:true,timeout:10000,maximumAge:60000})};async function compass(){try{if(typeof DeviceOrientationEvent!='undefined'&&typeof DeviceOrientationEvent.requestPermission=='function'){let p=await DeviceOrientationEvent.requestPermission();if(p!='granted')return toast('Autorise la boussole.')}addEventListener('deviceorientation',e=>{let h=e.webkitCompassHeading;if(typeof h!='number'&&e.alpha!=null)h=(360-e.alpha)%360;if(typeof h=='number'){head=h;oriented=true}},true);toast('🧭 Tourne doucement ton téléphone.')}catch(e){toast('Boussole indisponible.')}}document.getElementById('orient').onclick=compass;
-document.getElementById('planetsBtn').onclick=()=>{if(!located)return toast('📍 Active d’abord ta position.');let d=new Date(),html='';P.forEach(p=>{let a=paa(p[1],d);if(a)html+=`<div class="item"><b>${p[2]} ${p[0]}</b><span>${a.alt>0?'Visible':'Sous l’horizon'} • azimut ${a.az.toFixed(0)}° • altitude ${a.alt.toFixed(0)}°</span></div>`});card('🪐 Les planètes','Positions calculées pour ton lieu et maintenant.',html)};
-async function loadSat(){if(satOK)return;toast('🛰️ Je récupère les satellites…');let all=[];for(let u of ['https://celestrak.org/NORAD/elements/gp.php?GROUP=stations&FORMAT=json','https://celestrak.org/NORAD/elements/gp.php?GROUP=visual&FORMAT=json'])try{let r=await fetch(u,{cache:'no-store'});if(r.ok)all=all.concat(await r.json())}catch(e){}let seen=new Set();sats=all.map(o=>{try{return{name:o.OBJECT_NAME||'Satellite',satrec:satellite.twoline2satrec(o.TLE_LINE1,o.TLE_LINE2)}}catch(e){return null}}).filter(Boolean).filter(o=>{if(seen.has(o.name))return false;seen.add(o.name);return true});satOK=!!sats.length;toast(satOK?`🛰️ ${sats.length} satellites chargés`:'Impossible de charger les satellites.');}document.getElementById('satBtn').onclick=async()=>{if(!located)return toast('📍 Active d’abord ta position.');await loadSat();showSat=true;if(satOK)card('🛰️ Satellites réels','Les points verts sont calculés à partir de données orbitales récentes. La station spatiale internationale est incluse dans le groupe des stations.','')} ;
-document.getElementById('missionBtn').onclick=()=>{document.getElementById('mission').classList.add('show');document.getElementById('missionText').textContent='Trouve Sirius, une planète ou un satellite puis touche-le !';toast('🔎 À toi de jouer !')};function save(n){if(!found.includes(n)){found.push(n);localStorage.setItem('skyBook',JSON.stringify(found));toast('🏆 Nouvelle découverte !')}}document.getElementById('bookBtn').onclick=()=>card('🏆 Mon carnet',found.length?'Chaque découverte est gardée sur ce téléphone.':'Ton carnet est vide. Pars explorer ! 🌌',found.map(n=>`<div class="item">${n}</div>`).join(''));
-c.addEventListener('pointerdown',e=>{let d=new Date(),best=null,bd=30;S.forEach(s=>{let a=aa(s,d);if(a.alt>-4){let q=pos(a.az,a.alt),z=Math.hypot(q.x-e.clientX,q.y-e.clientY);if(z<bd){bd=z;best={...s,...a}}}});if(best){save('⭐ '+best.n);card(best.i+' '+best.n,best.f,`<span class="badge">altitude ${best.alt.toFixed(0)}°</span><span class="badge">azimut ${best.az.toFixed(0)}°</span>`);if(best.n==='Sirius')document.getElementById('missionText').textContent='🎉 Bravo ! Sirius est trouvée !';return}if(located)P.forEach(p=>{let a=paa(p[1],d);if(a&&a.alt>-3){let q=pos(a.az,a.alt);if(Math.hypot(q.x-e.clientX,q.y-e.clientY)<30){save('🪐 '+p[0]);card(p[2]+' '+p[0],p[3],`<span class="badge">altitude ${a.alt.toFixed(0)}°</span><span class="badge">azimut ${a.az.toFixed(0)}°</span>`)}}})});function clock(){document.getElementById('clock').textContent=new Date().toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})}setInterval(clock,1000);clock();setTimeout(()=>toast('🌌 Active 📍 Position pour commencer'),700);
-</script></body></html>
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+  <meta name="theme-color" content="#030512">
+  <title>Petit Explorateur du Ciel</title>
+  <style>
+    :root { --g: rgba(7,13,37,.78); --l: rgba(255,255,255,.14); --t: #f7f9ff; --m: #aeb9d9; --y: #ffd86b; --game: #ff3b8f; }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body { margin: 0; height: 100%; overflow: hidden; background: #030512; color: var(--t); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; touch-action: none; }
+    
+    /* Mode Parent / Enfant */
+    body.mode-enfant .tech-data { display: none !important; }
+    body.mode-enfant .brand { color: #ff8df8; font-size: 20px; }
+    
+    #sky { position: fixed; inset: 0; width: 100%; height: 100%; background: radial-gradient(circle at 50% 42%, #121c49, #080d27 45%, #010208 100%); }
+    
+    .top { position: fixed; z-index: 3; top: 0; left: 0; right: 0; padding: max(12px, env(safe-area-inset-top)) 14px 8px; display: flex; justify-content: space-between; text-shadow: 0 2px 14px #000; pointer-events: none; }
+    .brand { font-size: 18px; font-weight: 900; transition: color 0.3s; }
+    .status { font-size: 12px; color: var(--m); text-align: right; pointer-events: auto; }
+    
+    .bottom { position: fixed; z-index: 4; left: 8px; right: 8px; bottom: max(8px, env(safe-area-inset-bottom)); display: flex; gap: 7px; justify-content: center; flex-wrap: wrap; }
+    button { color: var(--t); background: var(--g); border: 1px solid var(--l); border-radius: 20px; padding: 12px 16px; font-size: 14px; font-weight: 800; backdrop-filter: blur(16px); box-shadow: 0 8px 30px #0005; cursor: pointer; }
+    button:active { transform: scale(.96); }
+    .primary { border: 0; background: linear-gradient(135deg, #566aff, #7757ff); font-size: 15px; }
+    .gold { color: var(--y); border-color: #ffd86b55; }
+    .game { color: #fff; background: linear-gradient(135deg, #ff3b8f, #ff714a); border: 0; }
+    
+    .card { display: none; position: fixed; z-index: 8; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(90vw, 410px); max-height: 76vh; overflow: auto; padding: 22px; border: 2px solid var(--l); border-radius: 30px; background: rgba(4, 8, 25, 0.95); backdrop-filter: blur(20px); box-shadow: 0 24px 90px #000; }
+    .card.show { display: block; animation: pop 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+    @keyframes pop { from { transform: translate(-50%, -40%) scale(0.8); opacity: 0; } to { transform: translate(-50%, -50%) scale(1); opacity: 1; } }
+    
+    .close { float: right; padding: 7px 10px; border-radius: 12px; font-size: 16px; }
+    .card h2 { margin: 0 42px 10px 0; font-size: 26px; font-weight: 900; }
+    .card p { color: var(--m); line-height: 1.5; font-size: 16px; }
+    .badge { display: inline-block; padding: 6px 10px; border-radius: 999px; background: rgba(255, 216, 107, 0.15); color: var(--y); font-size: 12px; font-weight: 900; margin: 4px; }
+    .item { padding: 12px 14px; margin: 8px 0; border-radius: 18px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); display: flex; align-items: center; justify-content: space-between; font-size: 16px; font-weight: 700; }
+    .row { display: flex; gap: 10px; margin-top: 16px; }
+    .row button { flex: 1; padding: 14px; font-size: 16px; }
+    
+    #mission { display: none; position: fixed; z-index: 5; top: 75px; left: 50%; transform: translateX(-50%); width: min(92vw, 430px); text-align: center; padding: 15px; border-radius: 24px; background: rgba(255, 59, 143, 0.2); border: 2px solid #ff3b8f; backdrop-filter: blur(15px); box-shadow: 0 10px 30px rgba(255, 59, 143, 0.3); }
+    #mission.show { display: block; animation: slideDown 0.5s ease-out; }
+    @keyframes slideDown { from { top: -100px; } to { top: 75px; } }
+    .missionTitle { font-weight: 900; font-size: 18px; color: #fff; display: flex; align-items: center; justify-content: center; gap: 8px; }
+    .missionText { font-size: 14px; color: #ffb8d8; margin-top: 5px; font-weight: 700; }
+    
+    #toast { position: fixed; z-index: 12; left: 50%; bottom: 120px; transform: translateX(-50%) translateY(20px); opacity: 0; background: #fff; color: #111; padding: 12px 20px; border-radius: 999px; font-weight: 900; font-size: 15px; transition: .3s cubic-bezier(0.175, 0.885, 0.32, 1.275); max-width: 90vw; text-align: center; box-shadow: 0 10px 40px rgba(0,0,0,0.5); }
+    #toast.show { opacity: 1; transform: translateX(-50%); }
+    
+    #cross { position: fixed; z-index: 2; left: 50%; top: 50%; width: 70px; height: 70px; transform: translate(-50%, -50%); border: 2px dashed rgba(255,255,255,0.4); border-radius: 50%; pointer-events: none; transition: border-color 0.2s, transform 0.2s; }
+    #cross.locked { border-color: #7dffb2; border-style: solid; transform: translate(-50%, -50%) scale(1.1); box-shadow: 0 0 20px #7dffb255; }
+    #cross:before, #cross:after { content: ""; position: absolute; background: rgba(255,255,255,0.4); transition: background 0.2s; }
+    #cross.locked:before, #cross.locked:after { background: #7dffb2; }
+    #cross:before { width: 2px; height: 84px; left: 33px; top: -9px; }
+    #cross:after { height: 2px; width: 84px; left: -9px; top: 33px; }
+    
+    #modeToggle { background: none; border: none; box-shadow: none; padding: 5px; font-size: 18px; display: block; margin-top: 4px; text-decoration: underline; color: var(--m); font-weight: normal; }
+  </style>
+</head>
+<body class="mode-enfant">
+
+<canvas id="sky"></canvas>
+<div id="cross"></div>
+
+<div class="top">
+  <div class="brand">✨ Petit Explorateur</div>
+  <div class="status">
+    <span id="clock"></span>
+    <button id="modeToggle">👨‍🚀 Passer en mode Astronome</button>
+  </div>
+</div>
+
+<div id="mission">
+  <div class="missionTitle">🌙 MISSION DU SOIR</div>
+  <div class="missionText" id="missionText">Trouve la Lune, Sirius, et l'ISS !</div>
+</div>
+
+<div class="bottom">
+  <button class="primary" id="locate">📍 Activer position</button>
+  <button id="orient">🧭 Bouger l'écran</button>
+  <button class="gold" id="planetsBtn">🪐 Planètes & Lune</button>
+  <button id="satBtn">🛰️ Satellites</button>
+  <button class="game" id="missionBtn">🎮 Mission</button>
+  <button id="bookBtn">🏆 Mon Carnet</button>
+</div>
+
+<div class="card" id="card">
+  <button class="close" id="close">✕</button>
+  <h2 id="title"></h2>
+  <p id="text"></p>
+  <div id="body"></div>
+  <div class="row">
+    <button id="speak" class="primary">🔊 Écouter l'histoire</button>
+    <button id="close2">Génial !</button>
+  </div>
+</div>
+<div id="toast"></div>
+
+<!-- Scripts pour le calcul astronomique -->
+<script src="https://cdn.jsdelivr.net/npm/satellite.js@6.0.2/dist/satellite.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/astronomy-engine@2.1.19/astronomy.browser.min.js"></script>
+
+<script>
+const c = document.getElementById('sky'), x = c.getContext('2d');
+let W, H, D = 1, lat = 48.8, lon = 2.3, hgt = 0, head = 0;
+let located = false, oriented = false, showSat = false, sats = [], satOK = false;
+let found = JSON.parse(localStorage.getItem('skyBook') || '[]');
+let activeTarget = null;
+let modeEnfant = true;
+
+const S = [
+  ['Sirius', 6.7525, -16.7161, -1.46, '🐕', 'Je suis Sirius ! Je suis l’une des étoiles les plus brillantes du ciel.'],
+  ['Vega', 18.6156, 38.7837, 0.03, '🦅', 'Je suis Véga, l’étoile brillante de la Lyre.'],
+  ['Betelgeuse', 5.9195, 7.4071, 0.5, '🏹', 'Je suis la supergéante rouge sur l’épaule d’Orion le chasseur.'],
+  ['Rigel', 5.2423, -8.2016, 0.13, '🏹', 'Je suis Rigel, l’étoile bleue qui brille au pied d’Orion.'],
+  ['Aldebaran', 4.5987, 16.509, 0.85, '🐂', 'On m’appelle l’œil orangé du Taureau.'],
+  ['Dubhe', 11.062, 61.751, 1.79, '🐻', 'Je suis le dos de la Grande Ourse !'],
+  ['Merak', 11.03, 56.38, 2.34, '🐻', 'Je fais partie de la casserole de la Grande Ourse !'],
+  ['Phecda', 11.89, 53.69, 2.41, '🐻', 'Une étoile de la Grande Ourse !'],
+  ['Megrez', 12.25, 57.03, 3.32, '🐻', 'Une étoile de la Grande Ourse !'],
+  ['Alioth', 12.9, 55.95, 1.76, '🐻', 'Une étoile de la Grande Ourse !'],
+  ['Mizar', 13.39, 54.92, 2.23, '🐻', 'Une étoile de la Grande Ourse !'],
+  ['Alkaid', 13.79, 49.31, 1.85, '🐻', 'Je suis le bout de la queue de la Grande Ourse !']
+].map(a => ({ n: a[0], ra: a[1], dec: a[2], m: a[3], i: a[4], f: a[5] }));
+
+const L = [
+  ['Dubhe', 'Merak'], ['Merak', 'Phecda'], ['Phecda', 'Megrez'], 
+  ['Megrez', 'Dubhe'], ['Megrez', 'Alioth'], ['Alioth', 'Mizar'], ['Mizar', 'Alkaid']
+];
+
+const P = [
+  ['Lune', 'Moon', '🌙', 'La Lune ! Elle change de forme chaque nuit.'],
+  ['Vénus', 'Venus', '♀️', 'Très brillante, on l’appelle l’étoile du berger, mais c’est une planète !'],
+  ['Mars', 'Mars', '♂️', 'La planète rouge.'],
+  ['Jupiter', 'Jupiter', '♃', 'La plus grande des planètes, un vrai géant !'],
+  ['Saturne', 'Saturn', '🪐', 'La planète avec des anneaux magnifiques.']
+];
+
+function resize() {
+  D = Math.min(devicePixelRatio || 1, 2);
+  W = innerWidth; H = innerHeight;
+  c.width = W * D; c.height = H * D;
+  c.style.width = W + 'px'; c.style.height = H + 'px';
+  x.setTransform(D, 0, 0, D, 0, 0);
+}
+addEventListener('resize', resize); resize();
+
+function rad(v) { return v * Math.PI / 180; }
+function deg(v) { return v * 180 / Math.PI; }
+function jd(d) { return d.getTime() / 86400000 + 2440587.5; }
+function lst(d) {
+  let T = (jd(d) - 2451545) / 36525;
+  let g = 280.46061837 + 360.98564736629 * (jd(d) - 2451545) + .000387933 * T * T - T * T * T / 38710000;
+  return ((g + lon) % 360 + 360) % 360;
+}
+
+function aa(s, d) {
+  let H = ((lst(d) / 15 - s.ra + 24) % 24) * 15, r = rad(H), dc = rad(s.dec), la = rad(lat);
+  let alt = Math.asin(Math.sin(dc) * Math.sin(la) + Math.cos(dc) * Math.cos(la) * Math.cos(r));
+  let az = Math.atan2(-Math.sin(r) * Math.cos(dc), Math.sin(dc) * Math.cos(la) - Math.cos(dc) * Math.sin(la) * Math.cos(r));
+  return { alt: deg(alt), az: (deg(az) + 360) % 360 };
+}
+
+function pos(az, alt) {
+  let a = az - (oriented ? head : 0), r = (90 - alt) / 90 * Math.min(W, H) * .46;
+  return { x: W / 2 + Math.sin(rad(a)) * r, y: H / 2 - Math.cos(rad(a)) * r };
+}
+
+function paa(body, d) {
+  try {
+    let o = new Astronomy.Observer(lat, lon, hgt);
+    let q = Astronomy.Equator(body, d, o, true, true);
+    return Astronomy.Horizon(d, o, q.ra, q.dec, 'normal');
+  } catch(e) { return null; }
+}
+
+function getMoonPhase(d) {
+  let phase = Astronomy.MoonPhase(d); 
+  if(phase < 22.5 || phase > 337.5) return '🌑 Nouvelle lune';
+  if(phase < 67.5) return '🌒 Premier croissant';
+  if(phase < 112.5) return '🌓 Premier quartier';
+  if(phase < 157.5) return '🌔 Lune gibbeuse croissante';
+  if(phase < 202.5) return '🌕 Pleine lune';
+  if(phase < 247.5) return '🌖 Lune gibbeuse décroissante';
+  if(phase < 292.5) return '🌗 Dernier quartier';
+  return '🌘 Dernier croissant';
+}
+
+function satPos(s, d) {
+  try {
+    let q = satellite.propagate(s.satrec, d);
+    if (!q.position) return null;
+    let ecf = satellite.eciToEcf(q.position, satellite.gstime(d));
+    let o = { longitude: rad(lon), latitude: rad(lat), height: hgt / 1000 };
+    let z = satellite.ecfToLookAngles(o, ecf);
+    return { az: deg(z.azimuth), alt: deg(z.elevation) };
+  } catch(e) { return null; }
+}
+
+function draw() {
+  x.clearRect(0, 0, W, H);
+  
+  // Fond ciel
+  let g = x.createRadialGradient(W / 2, H * .42, 10, W / 2, H * .42, Math.max(W, H) * .75);
+  g.addColorStop(0, '#283d9122'); g.addColorStop(1, '#0000');
+  x.fillStyle = g; x.fillRect(0, 0, W, H);
+  
+  let now = new Date(), pts = [];
+  let isCenterLocked = false;
+  let cx = W/2, cy = H/2;
+  
+  // Calcul étoiles
+  S.forEach(s => {
+    let a = aa(s, now);
+    if (a.alt > -4) {
+      let q = pos(a.az, a.alt);
+      pts.push({ ...s, ...a, ...q });
+    }
+  });
+
+  // Dessin constellations (lignes)
+  x.strokeStyle = '#ffffff33'; x.lineWidth = 2;
+  L.forEach(l => {
+    let A = pts.find(p => p.n == l[0]), B = pts.find(p => p.n == l[1]);
+    if (A && B) { x.beginPath(); x.moveTo(A.x, A.y); x.lineTo(B.x, B.y); x.stroke(); }
+  });
+
+  // Affichage étoiles
+  pts.forEach(p => {
+    let z = Math.max(2, 5 - p.m * 1.5);
+    x.beginPath(); x.arc(p.x, p.y, z + 6, 0, 7); x.fillStyle = '#ffe27a11'; x.fill();
+    x.beginPath(); x.arc(p.x, p.y, z, 0, 7);
+    x.fillStyle = p.m < 0 ? '#fff0a2' : '#fff';
+    x.shadowBlur = 15; x.shadowColor = '#fff'; x.fill(); x.shadowBlur = 0;
+    
+    if (p.m < 1.5 && !modeEnfant) {
+      x.font = '700 12px sans-serif'; x.fillStyle = '#ffffffc7';
+      x.fillText(p.n, p.x + 10, p.y - 8);
+    }
+    
+    if (oriented && Math.hypot(p.x - cx, p.y - cy) < 35 && p.n === activeTarget) isCenterLocked = true;
+  });
+
+  // Affichage planètes & Lune
+  if (located) {
+    P.forEach(p => {
+      let a = paa(p[1], now);
+      if (a && a.alt > -3) {
+        let q = pos(a.az, a.alt);
+        x.beginPath(); x.arc(q.x, q.y, p[1] === 'Moon' ? 14 : 9, 0, 7);
+        x.fillStyle = p[1] === 'Moon' ? '#fffdee' : '#ffd86b';
+        x.shadowBlur = 25; x.shadowColor = x.fillStyle; x.fill(); x.shadowBlur = 0;
+        
+        if(!modeEnfant || p[1] === 'Moon') {
+          x.font = '800 14px sans-serif'; x.fillStyle = '#fff';
+          x.fillText(p[2] + ' ' + p[0], q.x + 16, q.y + 5);
+        }
+
+        if (oriented && Math.hypot(q.x - cx, q.y - cy) < 40 && p[0] === activeTarget) isCenterLocked = true;
+      }
+    });
+  }
+
+  // Affichage satellites
+  if (showSat && satOK) {
+    sats.forEach(s => {
+      let a = satPos(s, now);
+      if (a && a.alt > 0) {
+        let q = pos(a.az, a.alt);
+        x.beginPath(); x.arc(q.x, q.y, 6, 0, 7);
+        x.fillStyle = '#7dffb2'; x.shadowBlur = 20; x.shadowColor = '#7dffb2'; x.fill(); x.shadowBlur = 0;
+        
+        x.font = '800 11px sans-serif'; x.fillStyle = '#9cffc3';
+        x.fillText('🚀 ' + s.name, q.x + 10, q.y - 6);
+
+        if (oriented && Math.hypot(q.x - cx, q.y - cy) < 40 && s.name.includes(activeTarget)) isCenterLocked = true;
+      }
+    });
+  }
+
+  // Points cardinaux
+  x.font = '900 16px sans-serif'; x.fillStyle = '#ffffff66';
+  [['N', 0], ['E', 90], ['S', 180], ['O', 270]].forEach(a => {
+    let r = Math.min(W, H) * .42, v = a[1] - (oriented ? head : 0);
+    x.fillText(a[0], cx + Math.sin(rad(v)) * r - 6, cy - Math.cos(rad(v)) * r + 6);
+  });
+
+  // Mise à jour visuelle du réticule
+  let crossEl = document.getElementById('cross');
+  if (isCenterLocked) {
+    crossEl.classList.add('locked');
+    if(Math.random() < 0.05) triggerVictory(activeTarget); 
+  } else {
+    crossEl.classList.remove('locked');
+  }
+
+  requestAnimationFrame(draw);
+}
+draw();
+
+// Gestion UI
+function toast(t) {
+  let e = document.getElementById('toast');
+  e.textContent = t; e.classList.add('show');
+  clearTimeout(window._t);
+  window._t = setTimeout(() => e.classList.remove('show'), 3000);
+}
+
+function card(title, text, badgesHtml = '') {
+  document.getElementById('title').textContent = title;
+  document.getElementById('text').textContent = text;
+  document.getElementById('body').innerHTML = badgesHtml;
+  document.getElementById('card').classList.add('show');
+  window.speech = text;
+}
+
+function closeCard() { document.getElementById('card').classList.remove('show'); }
+document.getElementById('close').onclick = closeCard;
+document.getElementById('close2').onclick = closeCard;
+
+document.getElementById('speak').onclick = () => {
+  if ('speechSynthesis' in window) {
+    speechSynthesis.cancel();
+    let u = new SpeechSynthesisUtterance(window.speech || 'Bonjour petit astronome');
+    u.lang = 'fr-FR'; u.rate = 0.85; u.pitch = 1.1; // Voix un peu plus douce/lente pour enfant
+    speechSynthesis.speak(u);
+  }
+};
+
+document.getElementById('modeToggle').onclick = () => {
+  modeEnfant = !modeEnfant;
+  document.body.className = modeEnfant ? 'mode-enfant' : '';
+  document.getElementById('modeToggle').textContent = modeEnfant ? "👨‍🚀 Passer en mode Astronome" : "🧸 Passer en mode Enfant";
+  toast(modeEnfant ? "Mode Petit Explorateur activé ✨" : "Mode Astronome activé 🔬");
+};
+
+// Géolocalisation & Boussole
+document.getElementById('locate').onclick = () => {
+  if (!navigator.geolocation) return toast('Localisation indisponible.');
+  toast('📍 Recherche de ta position...');
+  navigator.geolocation.getCurrentPosition(p => {
+    lat = p.coords.latitude; lon = p.coords.longitude; hgt = p.coords.altitude || 0;
+    located = true; toast('✨ Super ! Position trouvée !');
+    document.getElementById('locate').style.background = 'var(--g)';
+  }, () => toast('Autorise la localisation pour jouer.'), { enableHighAccuracy: true });
+};
+
+async function compass() {
+  try {
+    if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+      let p = await DeviceOrientationEvent.requestPermission();
+      if (p !== 'granted') return toast('Autorise la boussole pour bouger le ciel.');
+    }
+    addEventListener('deviceorientation', e => {
+      let h = e.webkitCompassHeading;
+      if (typeof h !== 'number' && e.alpha != null) h = (360 - e.alpha) % 360;
+      if (typeof h === 'number') { head = h; oriented = true; }
+    }, true);
+    toast('🧭 Tourne avec ton téléphone !');
+    document.getElementById('orient').style.background = 'var(--g)';
+  } catch (e) { toast('Boussole indisponible sur cet appareil.'); }
+}
+document.getElementById('orient').onclick = compass;
+
+// Menus
+document.getElementById('planetsBtn').onclick = () => {
+  if (!located) return toast('📍 Touche "Activer position" en premier !');
+  let d = new Date(), html = '';
+  P.forEach(p => {
+    let a = paa(p[1], d);
+    if (a) {
+      let extra = p[1] === 'Moon' ? ` • <b>${getMoonPhase(d)}</b>` : '';
+      html += `<div class="item"><span>${p[2]} ${p[0]}</span><span class="tech-data">${a.alt > 0 ? 'Visible' : 'Cachée'} ${extra}</span></div>`;
+    }
+  });
+  card('🪐 Les planètes et la Lune', 'Voici ce qui se trouve au-dessus de toi en ce moment.', html);
+};
+
+async function loadSat() {
+  if (satOK) return;
+  toast('🛰️ Recherche de la station spatiale...');
+  let all = [];
+  for (let u of ['https://celestrak.org/NORAD/elements/gp.php?GROUP=stations&FORMAT=json']) {
+    try {
+      let r = await fetch(u, { cache: 'no-store' });
+      if (r.ok) all = all.concat(await r.json());
+    } catch (e) {}
+  }
+  sats = all.map(o => {
+    try { return { name: o.OBJECT_NAME || 'Satellite', satrec: satellite.twoline2satrec(o.TLE_LINE1, o.TLE_LINE2) }; } 
+    catch(e) { return null; }
+  }).filter(Boolean);
+  satOK = !!sats.length;
+  if(satOK) toast(`🛰️ Station trouvée !`);
+}
+
+document.getElementById('satBtn').onclick = async () => {
+  if (!located) return toast('📍 Active ta position !');
+  await loadSat();
+  showSat = true;
+  card('🚀 Satellites', 'La station spatiale internationale vole dans l’espace au-dessus de la Terre. Cherche les petits points verts qui bougent vite !', '');
+};
+
+// Mode Jeu / Missions
+document.getElementById('missionBtn').onclick = () => {
+  if(!located || !oriented) return toast('Active la position et la boussole pour jouer !');
+  document.getElementById('mission').classList.add('show');
+  activeTarget = "Sirius"; // Mission par défaut
+  document.getElementById('missionText').textContent = `Mets le rond central sur l'étoile ${activeTarget} !`;
+  toast('🔎 Mission activée ! Cherche dans le ciel.');
+};
+
+function triggerVictory(targetName) {
+  if(activeTarget === targetName) {
+    save('⭐ Trouvé: ' + targetName);
+    document.getElementById('missionText').textContent = `🎉 Bravo ! Tu as trouvé ${targetName} !`;
+    document.getElementById('mission').style.background = '#7dffb244';
+    document.getElementById('mission').style.borderColor = '#7dffb2';
+    activeTarget = null; // Stoppe la détection
+    toast('✨ MISSION RÉUSSIE !');
+    
+    // Confetti effect via canvas temporaire ou juste sonore
+    if ('speechSynthesis' in window) {
+      let u = new SpeechSynthesisUtterance("Bravo ! Tu l'as trouvé !");
+      u.lang = 'fr-FR'; u.rate = 1.2; u.pitch = 1.3;
+      speechSynthesis.speak(u);
+    }
+  }
+}
+
+function save(n) {
+  if (!found.includes(n)) {
+    found.push(n);
+    localStorage.setItem('skyBook', JSON.stringify(found));
+  }
+}
+
+document.getElementById('bookBtn').onclick = () => {
+  card('🏆 Mon Carnet d\'Exploratrice', 
+       found.length ? `Tu as découvert ${found.length} trésors dans le ciel !` : 'Ton carnet est vide pour l\'instant. Remplissons-le !', 
+       found.map(n => `<div class="item">${n}</div>`).join(''));
+};
+
+// Interactions tactiles libres
+c.addEventListener('pointerdown', e => {
+  let d = new Date(), best = null, bd = 40; // Zone de clic élargie pour enfant
+  S.forEach(s => {
+    let a = aa(s, d);
+    if (a.alt > -4) {
+      let q = pos(a.az, a.alt), z = Math.hypot(q.x - e.clientX, q.y - e.clientY);
+      if (z < bd) { bd = z; best = { ...s, ...a }; }
+    }
+  });
+
+  if (best) {
+    save(best.i + ' ' + best.n);
+    let badges = `<span class="tech-data badge">alt: ${best.alt.toFixed(0)}°</span><span class="tech-data badge">azi: ${best.az.toFixed(0)}°</span>`;
+    card(best.i + ' ' + best.n, best.f, badges);
+    return;
+  }
+
+  if (located) {
+    P.forEach(p => {
+      let a = paa(p[1], d);
+      if (a && a.alt > -3) {
+        let q = pos(a.az, a.alt);
+        if (Math.hypot(q.x - e.clientX, q.y - e.clientY) < 40) {
+          save(p[2] + ' ' + p[0]);
+          let extra = p[1] === 'Moon' ? `<br><span class="badge" style="background:#fff3; color:#fff">${getMoonPhase(d)}</span>` : '';
+          card(p[2] + ' ' + p[0], p[3], `<span class="tech-data badge">alt: ${a.alt.toFixed(0)}°</span>` + extra);
+        }
+      }
+    });
+  }
+});
+
+function clock() {
+  document.getElementById('clock').textContent = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+}
+setInterval(clock, 1000); clock();
+setTimeout(() => toast('🌌 Bienvenue ! Active la Position pour commencer.'), 1000);
+</script>
+</body>
+</html>
