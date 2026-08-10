@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#050817">
+<title>Petit Explorateur du Ciel</title>
+<style>
+:root{--bg:#050817;--glass:rgba(9,16,43,.72);--line:rgba(255,255,255,.14);--text:#f6f8ff;--muted:#aeb8d8;--gold:#ffd76a;--blue:#77c9ff}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+body{touch-action:none}
+#sky{position:fixed;inset:0;width:100%;height:100%;display:block;background:radial-gradient(circle at 50% 50%,#10183d 0,#070b22 42%,#02030d 100%)}
+.vignette{position:fixed;inset:0;pointer-events:none;background:radial-gradient(circle,transparent 35%,rgba(0,0,0,.5) 100%)}
+.top{position:fixed;top:0;left:0;right:0;padding:max(12px,env(safe-area-inset-top)) 14px 10px;display:flex;justify-content:space-between;align-items:center;pointer-events:none}
+.brand{font-weight:800;font-size:18px;text-shadow:0 2px 12px #000}
+.clock{font-size:13px;color:var(--muted)}
+.panel{position:fixed;left:12px;right:12px;bottom:max(12px,env(safe-area-inset-bottom));display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+button{border:1px solid var(--line);background:var(--glass);color:var(--text);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-radius:18px;padding:12px 14px;font-size:14px;font-weight:700;box-shadow:0 8px 30px rgba(0,0,0,.25)}
+button:active{transform:scale(.97)}
+.primary{background:linear-gradient(135deg,#5268ff,#7658ff);border:0}
+.card{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:min(88vw,390px);background:rgba(5,10,30,.91);border:1px solid var(--line);border-radius:26px;padding:20px;box-shadow:0 20px 80px #000;display:none;z-index:5}
+.card.show{display:block;animation:pop .2s ease-out}
+@keyframes pop{from{opacity:0;transform:translate(-50%,-46%) scale(.96)}to{opacity:1;transform:translate(-50%,-50%) scale(1)}}
+.card h2{margin:0 0 8px;font-size:25px}.card p{margin:7px 0;color:var(--muted);line-height:1.45}
+.close{float:right;padding:7px 10px;border-radius:12px}
+.badge{display:inline-block;margin-top:8px;padding:6px 10px;border-radius:999px;background:rgba(255,215,106,.12);color:var(--gold);font-size:12px;font-weight:800}
+#mission{display:none;position:fixed;top:72px;left:50%;transform:translateX(-50%);width:min(92vw,420px);text-align:center;background:var(--glass);border:1px solid var(--line);border-radius:20px;padding:12px 16px;backdrop-filter:blur(12px);z-index:3}
+#mission.show{display:block}.mission-title{font-weight:800}.mission-text{font-size:13px;color:var(--muted);margin-top:3px}
+#toast{position:fixed;left:50%;bottom:105px;transform:translateX(-50%) translateY(15px);opacity:0;background:#fff;color:#111;padding:11px 16px;border-radius:999px;font-weight:800;transition:.25s;z-index:10;white-space:nowrap}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+#crosshair{position:fixed;left:50%;top:50%;width:58px;height:58px;transform:translate(-50%,-50%);border:1px solid rgba(255,255,255,.22);border-radius:50%;pointer-events:none}
+#crosshair:before,#crosshair:after{content:"";position:absolute;background:rgba(255,255,255,.25)}#crosshair:before{width:1px;height:72px;left:28px;top:-8px}#crosshair:after{height:1px;width:72px;top:28px;left:-8px}
+.small{font-size:12px;color:var(--muted)}
+</style>
+</head>
+<body>
+<canvas id="sky"></canvas>
+<div class="vignette"></div>
+<div class="top"><div class="brand">🌌 Petit Explorateur</div><div class="clock" id="clock"></div></div>
+<div id="mission"><div class="mission-title" id="missionTitle">🔎 Mission du soir</div><div class="mission-text" id="missionText">Trouve Sirius</div></div>
+<div id="crosshair"></div>
+<div class="panel">
+  <button class="primary" id="locate">📍 Ma position</button>
+  <button id="orient">🧭 Orienter</button>
+  <button id="missionBtn">🚀 Mission</button>
+  <button id="infoBtn">⭐ Explorer</button>
+</div>
+<div class="card" id="card">
+  <button class="close" id="close">✕</button>
+  <h2 id="cardTitle">Le ciel</h2>
+  <p id="cardText"></p>
+  <span class="badge" id="cardBadge"></span>
+</div>
+<div id="toast"></div>
+<script>
+/*
+ Petit Explorateur du Ciel — V1
+ 100% statique : parfait pour GitHub Pages.
+ Les positions stellaires sont calculées approximativement à partir de coordonnées
+ célestes intégrées. La position géographique et l'orientation du téléphone sont
+ utilisées quand le navigateur les autorise.
+*/
+
+const canvas=document.getElementById('sky'),ctx=canvas.getContext('2d');
+let W,H,DPR=1, lat=43.3, lon=5.37, heading=0, pitch=0, hasOrientation=false;
+let locationOK=false, orientOK=false;
+const stars=[
+ {n:"Sirius",ra:6.7525,dec:-16.7161,m: -1.46,icon:"🐕",fact:"L'une des étoiles les plus brillantes du ciel."},
+ {n:"Vega",ra:18.6156,dec:38.7837,m:0.03,icon:"🦅",fact:"Une étoile très brillante de la constellation de la Lyre."},
+ {n:"Betelgeuse",ra:5.9195,dec:7.4071,m:0.5,icon:"🏹",fact:"Une supergéante rouge dans Orion."},
+ {n:"Rigel",ra:5.2423,dec:-8.2016,m:0.13,icon:"🏹",fact:"Une étoile bleue très brillante d'Orion."},
+ {n:"Procyon",ra:7.655,dec:5.225,m:0.34,icon:"🐕",fact:"Une des étoiles principales du Petit Chien."},
+ {n:"Capella",ra:5.2782,dec:45.998,m:0.08,icon:"🐐",fact:"Une étoile brillante du Cocher."},
+ {n:"Aldebaran",ra:4.5987,dec:16.509,m:0.85,icon:"🐂",fact:"L'œil orangé du Taureau."},
+ {n:"Spica",ra:13.4199,dec:-11.1614,m:0.98,icon:"🌾",fact:"L'étoile la plus brillante de la Vierge."},
+ {n:"Antares",ra:16.4901,dec:-26.4319,m:0.96,icon:"🦂",fact:"Une supergéante rouge du Scorpion."},
+ {n:"Deneb",ra:20.6905,dec:45.2803,m:1.25,icon:"🦢",fact:"Une étoile brillante du Cygne."},
+ {n:"Altair",ra:19.8464,dec:8.8683,m:0.77,icon:"🦅",fact:"Une des trois étoiles du Triangle d'été."},
+ {n:"Pollux",ra:7.7553,dec:28.0262,m:1.14,icon:"👯",fact:"L'une des étoiles des Gémeaux."},
+ {n:"Regulus",ra:10.1395,dec:11.9672,m:1.35,icon:"🦁",fact:"Le cœur du Lion."},
+ {n:"Fomalhaut",ra:22.9608,dec:-29.6222,m:1.16,icon:"🐟",fact:"Une étoile brillante des Poissons australs."}
+];
+// Quelques dessins de constellations pour rendre la V1 ludique.
+const lines=[
+ ["Betelgeuse","Bellatrix"],["Betelgeuse","Alnilam"],["Alnilam","Alnitak"],["Alnilam","Mintaka"],
+ ["Rigel","Mintaka"],["Betelgeuse","Rigel"]
+];
+// étoiles secondaires pour Orion
+stars.push(
+ {n:"Bellatrix",ra:5.4189,dec:6.3497,m:1.64,icon:"🏹",fact:"Une étoile d'Orion."},
+ {n:"Alnilam",ra:5.6036,dec:-1.2019,m:1.69,icon:"🏹",fact:"Une des trois étoiles alignées de la ceinture d'Orion."},
+ {n:"Alnitak",ra:5.6793,dec:-1.9426,m:1.74,icon:"🏹",fact:"Une étoile de la ceinture d'Orion."},
+ {n:"Mintaka",ra:5.5334,dec:-0.2991,m:2.23,icon:"🏹",fact:"Une étoile de la ceinture d'Orion."}
+);
+
+function resize(){DPR=Math.min(devicePixelRatio||1,2);W=innerWidth;H=innerHeight;canvas.width=W*DPR;canvas.height=H*DPR;canvas.style.width=W+"px";canvas.style.height=H+"px";ctx.setTransform(DPR,0,0,DPR,0,0)}
+addEventListener('resize',resize);resize();
+
+function julianDate(d){return d.getTime()/86400000+2440587.5}
+function lst(date,lon){let jd=julianDate(date),T=(jd-2451545)/36525;
+ let gst=280.46061837+360.98564736629*(jd-2451545)+0.000387933*T*T-T*T*T/38710000;
+ return ((gst+lon)%360+360)%360;
+}
+function rad(x){return x*Math.PI/180}
+function deg(x){return x*180/Math.PI}
+function altAz(raH,decD,date){
+ const LST=lst(date,lon), Hh=rad(((LST/15-raH+24)%24)*15);
+ let dec=rad(decD), la=rad(lat);
+ let alt=Math.asin(Math.sin(dec)*Math.sin(la)+Math.cos(dec)*Math.cos(la)*Math.cos(Hh));
+ let az=Math.atan2(-Math.sin(Hh)*Math.cos(dec),Math.sin(dec)*Math.cos(la)-Math.cos(dec)*Math.sin(la)*Math.cos(Hh));
+ return {alt:deg(alt),az:(deg(az)+360)%360};
+}
+function visiblePoint(s){
+ const aa=altAz(s.ra,s.dec,new Date());
+ // Sans boussole: nord en haut. Avec boussole: azimut réel.
+ let a=aa.az-(hasOrientation?heading:0);
+ a=((a+540)%360)-180;
+ let r=(90-aa.alt)/90*(Math.min(W,H)*.46);
+ let x=W/2+Math.sin(rad(a))*r, y=H/2-Math.cos(rad(a))*r;
+ return {...s,...aa,x,y};
+}
+function draw(){
+ ctx.clearRect(0,0,W,H);
+ // halo doux
+ const g=ctx.createRadialGradient(W/2,H/2,20,W/2,H/2,Math.max(W,H)*.7);g.addColorStop(0,"rgba(35,54,130,.18)");g.addColorStop(1,"rgba(0,0,0,0)");
+ ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+ const now=new Date();
+ const pts=stars.map(visiblePoint).filter(p=>p.alt>-5);
+ // constellation lines
+ ctx.lineWidth=1;ctx.strokeStyle="rgba(119,201,255,.32)";
+ for(const [a,b] of lines){const A=pts.find(x=>x.n===a),B=pts.find(x=>x.n===b);if(A&&B){ctx.beginPath();ctx.moveTo(A.x,A.y);ctx.lineTo(B.x,B.y);ctx.stroke()}}
+ for(const p of pts){
+   const size=Math.max(1.5,4.5-p.m*1.4);
+   ctx.beginPath();ctx.arc(p.x,p.y,size+5,0,Math.PI*2);ctx.fillStyle="rgba(255,235,150,.05)";ctx.fill();
+   ctx.beginPath();ctx.arc(p.x,p.y,size,0,Math.PI*2);ctx.fillStyle=p.m<0?"#fff4b0":"#fff";ctx.shadowBlur=12;ctx.shadowColor="#fff";ctx.fill();ctx.shadowBlur=0;
+   if(p.m<1.1){
+     ctx.font="600 12px -apple-system,BlinkMacSystemFont,Segoe UI,sans-serif";ctx.fillStyle="rgba(255,255,255,.82)";
+     ctx.fillText(p.n,p.x+8,p.y-7);
+   }
+ }
+ // cardinal directions
+ const dirs=[["N",0],["E",90],["S",180],["O",270]];
+ ctx.font="800 13px sans-serif";ctx.fillStyle="rgba(255,255,255,.55)";
+ dirs.forEach(([t,a])=>{let aa=a-(hasOrientation?heading:0),rr=Math.min(W,H)*.42;ctx.fillText(t,W/2+Math.sin(rad(aa))*rr-4,H/2-Math.cos(rad(aa))*rr+5)});
+ requestAnimationFrame(draw);
+}
+draw();
+
+function toast(t){const e=document.getElementById('toast');e.textContent=t;e.classList.add('show');clearTimeout(window.__t);window.__t=setTimeout(()=>e.classList.remove('show'),2600)}
+function showCard(title,text,badge){document.getElementById('cardTitle').textContent=title;document.getElementById('cardText').textContent=text;document.getElementById('cardBadge').textContent=badge||"";document.getElementById('card').classList.add('show')}
+document.getElementById('close').onclick=()=>document.getElementById('card').classList.remove('show');
+
+document.getElementById('locate').onclick=()=>{
+ if(!navigator.geolocation){toast("La géolocalisation n'est pas disponible.");return}
+ toast("📍 Je cherche ta position…");
+ navigator.geolocation.getCurrentPosition(pos=>{
+   lat=pos.coords.latitude;lon=pos.coords.longitude;locationOK=true;
+   toast("✨ Position trouvée !");
+ },()=>toast("Autorise la localisation pour voir ton vrai ciel."),{enableHighAccuracy:true,timeout:10000,maximumAge:60000});
+};
+
+async function startOrientation(){
+ try{
+   if(typeof DeviceOrientationEvent!=="undefined" && typeof DeviceOrientationEvent.requestPermission==="function"){
+     const p=await DeviceOrientationEvent.requestPermission();if(p!=="granted"){toast("Autorise la boussole dans les réglages du navigateur.");return}
+   }
+   addEventListener('deviceorientation',e=>{
+     let h=e.webkitCompassHeading;
+     if(typeof h!=="number" && e.alpha!=null) h=(360-e.alpha)%360;
+     if(typeof h==="number"){heading=h;hasOrientation=true;orientOK=true}
+     pitch=e.beta||0;
+   },true);
+   toast("🧭 Tourne doucement ton téléphone vers le ciel.");
+ }catch(e){toast("La boussole n'est pas disponible sur cet appareil.")}
+}
+document.getElementById('orient').onclick=startOrientation;
+
+let missionDone=false;
+document.getElementById('missionBtn').onclick=()=>{
+ document.getElementById('mission').classList.add('show');
+ const target=stars.find(s=>s.n==="Sirius");
+ document.getElementById('missionTitle').textContent="🔎 Mission du soir : trouve Sirius";
+ document.getElementById('missionText').textContent="Tourne-toi et cherche l'étoile la plus brillante. Touche-la quand tu la vois !";
+};
+document.getElementById('infoBtn').onclick=()=>{
+ showCard("🌌 Bienvenue, petit astronome !",
+ "Le ciel affiché dépend de la date, de l'heure et de ta position. Active 📍 Ma position puis 🧭 Orienter pour transformer l'écran en carte du ciel.",
+ "⭐ Astuce : touche une étoile");
+};
+
+canvas.addEventListener('pointerdown',e=>{
+ const pts=stars.map(visiblePoint).filter(p=>p.alt>-5);
+ let best=null,bd=28;
+ for(const p of pts){let d=Math.hypot(p.x-e.clientX,p.y-e.clientY);if(d<bd){bd=d;best=p}}
+ if(best){
+   showCard(best.icon+" "+best.n,best.fact,`Altitude ${best.alt.toFixed(0)}° • Azimut ${best.az.toFixed(0)}°`);
+   if(best.n==="Sirius"){missionDone=true;document.getElementById('missionText').textContent="🎉 Bravo ! Tu as trouvé Sirius !";toast("🌟 MISSION RÉUSSIE !")}
+ }
+});
+
+function clock(){document.getElementById('clock').textContent=new Date().toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit"})}
+setInterval(clock,1000);clock();
+
+// Première invitation
+setTimeout(()=>toast("🌌 Appuie sur « Ma position » pour commencer"),900);
+</script>
+</body>
+</html>
