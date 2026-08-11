@@ -1,0 +1,494 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no"><meta name="theme-color" content="#030512"><title>Petit Explorateur du Ciel V3</title><style>
+:root{--g:rgba(7,13,37,.78);--l:rgba(255,255,255,.14);--t:#f7f9ff;--m:#aeb9d9;--y:#ffd86b}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;overflow:hidden;background:#030512;color:var(--t);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+body{touch-action:none}
+#sky{position:fixed;inset:0;z-index:1;width:100%;height:100%;background:radial-gradient(circle at 50% 42%,#121c49,#080d27 45%,#010208 100%)}
+#cam{position:fixed;inset:0;z-index:0;width:100%;height:100%;object-fit:cover;background:#000;display:none}
+body.ar #sky{background:transparent}
+body.night{filter:brightness(.72) saturate(2) sepia(.85) hue-rotate(-55deg) contrast(1.15)}
+#fx{position:fixed;inset:0;z-index:14;pointer-events:none}
+#zoomCtl{position:fixed;z-index:4;right:10px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:9px}
+#zoomCtl button{width:44px;height:44px;padding:0;border-radius:50%;font-size:17px;line-height:1}
+.top{position:fixed;z-index:3;top:0;left:0;right:0;padding:max(12px,env(safe-area-inset-top)) 14px 8px;display:flex;justify-content:space-between;text-shadow:0 2px 14px #000;pointer-events:none}
+.brand{font-size:18px;font-weight:900}
+.status{font-size:12px;color:var(--m);text-align:right}
+#modeLabel{color:var(--y);font-weight:800}
+.bottom{position:fixed;z-index:4;left:8px;right:8px;bottom:max(8px,env(safe-area-inset-bottom));display:flex;gap:7px;justify-content:center;flex-wrap:wrap}
+button{color:var(--t);background:var(--g);border:1px solid var(--l);border-radius:17px;padding:11px 12px;font-size:13px;font-weight:800;backdrop-filter:blur(16px);box-shadow:0 8px 30px #0005}
+button:active{transform:scale(.96)}
+.primary{border:0;background:linear-gradient(135deg,#566aff,#7757ff)}
+.gold{color:var(--y);border-color:#ffd86b55}
+.card{display:none;position:fixed;z-index:8;left:50%;top:50%;transform:translate(-50%,-50%);width:min(90vw,410px);max-height:76vh;overflow:auto;padding:20px;border:1px solid var(--l);border-radius:27px;background:#040819f5;box-shadow:0 24px 90px #000}
+.card.show{display:block}
+.close{float:right;padding:7px 10px;border-radius:12px}
+.card h2{margin:0 42px 8px 0;font-size:24px}
+.card p{color:var(--m);line-height:1.48}
+.card.explo h2{font-size:27px}
+.card.explo p{font-size:17px;line-height:1.58}
+.badge{display:inline-block;padding:6px 9px;border-radius:999px;background:#ffd86b1f;color:var(--y);font-size:11px;font-weight:900;margin:3px}
+.item{padding:11px 12px;margin:7px 0;border-radius:16px;background:#ffffff09;border:1px solid #ffffff12}
+.item b{display:block}
+.item span{font-size:12px;color:var(--m)}
+.row{display:flex;gap:8px;margin-top:12px}
+.row button{flex:1}
+#mission{display:none;position:fixed;z-index:5;top:68px;left:50%;transform:translateX(-50%);width:min(92vw,430px);text-align:center;padding:12px 15px;border-radius:20px;background:var(--g);border:1px solid var(--l);backdrop-filter:blur(15px)}
+#mission.show{display:block}
+.missionTitle{font-weight:900}
+.missionText{font-size:12px;color:var(--m);margin-top:3px}
+.missionGrid{display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin-top:9px}
+.mchip{padding:6px 10px;border-radius:12px;background:#ffffff0d;font-size:11px;font-weight:800;border:1px solid #ffffff14;white-space:nowrap}
+.mchip.found{background:#7dffb226;color:#7dffb2;border-color:#7dffb255}
+#toast{position:fixed;z-index:12;left:50%;bottom:108px;transform:translateX(-50%) translateY(15px);opacity:0;background:#fff;color:#111;padding:11px 16px;border-radius:999px;font-weight:900;transition:.25s;max-width:90vw;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#toast.show{opacity:1;transform:translateX(-50%)}
+#cross{position:fixed;z-index:2;left:50%;top:50%;width:60px;height:60px;transform:translate(-50%,-50%);border:1px solid #fff3;border-radius:50%;pointer-events:none}
+#cross:before,#cross:after{content:"";position:absolute;background:#fff3}
+#cross:before{width:1px;height:74px;left:29px;top:-8px}
+#cross:after{height:1px;width:74px;left:-8px;top:29px}
+</style></head><body>
+<video id="cam" autoplay playsinline muted></video><canvas id="sky"></canvas><canvas id="fx"></canvas><div id="cross"></div>
+<div id="zoomCtl"><button id="zoomIn">➕</button><button id="zoomOut">➖</button></div>
+<div class="top"><div class="brand">🌌 Petit Explorateur</div><div class="status">V3 • ciel réel<br><span id="modeLabel">🧒 Explorateur</span> • <span id="clock"></span></div></div>
+<div id="mission"><div class="missionTitle">🌙 Mission du soir</div><div class="missionText">4 trésors à trouver ce soir !</div><div class="missionGrid" id="missionGrid"></div></div>
+<div class="bottom">
+<button class="primary" id="locate">📍 Position</button>
+<button id="orient">🧭 Boussole</button>
+<button class="gold" id="planetsBtn">🪐 Planètes</button>
+<button id="satBtn">🛰️ Satellites</button>
+<button id="consBtn">🐻 Constellations</button>
+<button id="missionBtn">🎮 Mission</button>
+<button id="bookBtn">🏆 Carnet</button>
+<button id="moreBtn">⚙️ Plus</button>
+</div>
+<div class="card" id="card"><button class="close" id="close">✕</button><h2 id="title"></h2><p id="text"></p><div id="body"></div><div class="row"><button id="speak">🔊 Écouter</button><button id="close2">Continuer</button></div></div>
+<div id="toast"></div>
+<script src="https://cdn.jsdelivr.net/npm/satellite.js@6.0.2/dist/satellite.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/astronomy-engine@2.1.19/astronomy.browser.min.js"></script>
+<script>
+/* ===== état global ===== */
+const c=document.getElementById('sky'),x=c.getContext('2d'),fx=document.getElementById('fx'),fxx=fx.getContext('2d');
+let W,H,D=1,lat=43.3,lon=5.37,hgt=0,head=0,located=false,oriented=false,showSat=false,sats=[],satOK=false;
+let astroMode=localStorage.getItem('skyAstro')==='1';
+let nightMode=localStorage.getItem('skyNight')==='1';
+let arMode=false,camStream=null;
+let zoom=1,MINZ=.6,MAXZ=3.2;
+let pointers=new Map(),pinch=null,tapStart=null;
+
+/* ===== catalogue d'étoiles réelles (nom, ra en heures, dec en degrés, magnitude, icône, description) ===== */
+const S=[
+['Sirius',6.7525,-16.7161,-1.46,'🐕','Une des étoiles les plus brillantes du ciel.'],
+['Vega',18.6156,38.7837,.03,'🦅','Une étoile très brillante de la Lyre.'],
+['Betelgeuse',5.9195,7.4071,.5,'🏹','Une supergéante rouge dans Orion.'],
+['Rigel',5.2423,-8.2016,.13,'🏹','Une étoile bleue très brillante d’Orion.'],
+['Procyon',7.655,5.225,.34,'🐕','Une étoile brillante du Petit Chien.'],
+['Capella',5.2782,45.998,.08,'🐐','Une étoile brillante du Cocher.'],
+['Aldebaran',4.5987,16.509,.85,'🐂','L’œil orangé du Taureau.'],
+['Spica',13.4199,-11.1614,.98,'🌾','L’étoile principale de la Vierge.'],
+['Antares',16.4901,-26.4319,.96,'🦂','Une supergéante rouge du Scorpion.'],
+['Deneb',20.6905,45.2803,1.25,'🦢','Une étoile brillante du Cygne.'],
+['Altair',19.8464,8.8683,.77,'🦅','Une des trois étoiles du Triangle d’été.'],
+['Pollux',7.7553,28.0262,1.14,'👯','Une étoile des Gémeaux.'],
+['Regulus',10.1395,11.9672,1.35,'🦁','Le cœur du Lion.'],
+['Bellatrix',5.4189,6.3497,1.64,'🏹','Une étoile d’Orion.'],
+['Alnilam',5.6036,-1.2019,1.69,'🏹','Une étoile de la ceinture d’Orion.'],
+['Alnitak',5.6793,-1.9426,1.74,'🏹','Une étoile de la ceinture d’Orion.'],
+['Mintaka',5.5334,-.2991,2.23,'🏹','Une étoile de la ceinture d’Orion.'],
+['Dubhe',11.0622,61.7511,1.79,'🐻','Une étoile orangée, le coin de la grande casserole.'],
+['Merak',11.0307,56.3824,2.37,'🐻','Elle indique le chemin vers l’étoile du Nord !'],
+['Phecda',11.8971,53.6948,2.44,'🐻','Un coin du grand chaudron de la Grande Ourse.'],
+['Megrez',12.2571,57.0326,3.31,'🐻','La plus discrète des sept étoiles de la casserole.'],
+['Alioth',12.9005,55.9598,1.77,'🐻','L’étoile la plus brillante de la Grande Ourse.'],
+['Mizar',13.3987,54.9254,2.23,'🐻','Une étoile double, avec une petite compagne à côté.'],
+['Alkaid',13.7923,49.3133,1.86,'🐻','Le bout de la longue queue de la Grande Ourse.'],
+['Polaris',2.5303,89.2641,1.98,'🧭','L’étoile du Nord ! Elle reste toujours à la même place.'],
+['Kochab',14.8451,74.1555,2.08,'🐻','Une étoile orangée qui garde la Petite Ourse.'],
+['Pherkad',15.3455,71.834,3.05,'🐻','Elle brille doucement juste à côté de Kochab.'],
+['Yildun',17.5366,86.5864,4.36,'🐻','Une petite étoile du manche de la Petite Ourse.'],
+['Schedar',.6751,56.5373,2.24,'👑','Le cœur scintillant de la reine Cassiopée.'],
+['Caph',.153,59.1498,2.28,'👑','Un coin du grand W de Cassiopée.'],
+['Gamma Cassiopée',.9451,60.7167,2.47,'👑','Une étoile qui change parfois un peu de lumière !'],
+['Ruchbah',1.43,60.2353,2.68,'👑','Une étoile du dossier du trône de la reine.'],
+['Segin',1.9066,63.6701,3.35,'👑','Le dernier trait du grand W de Cassiopée.'],
+['Dschubba',16.0056,-22.6217,2.29,'🦂','La tête piquante du Scorpion.'],
+['Shaula',17.5601,-37.1038,1.62,'🦂','Le dard tout au bout de la queue du Scorpion.'],
+['Denebola',11.8177,14.572,2.14,'🦁','La queue du grand Lion céleste.'],
+['Castor',7.5766,31.8883,1.58,'👯','Un des deux frères jumeaux qui brillent côte à côte.'],
+['Elnath',5.4382,28.6075,1.65,'🐂','La pointe d’une des cornes du Taureau.']
+].map(a=>({n:a[0],ra:a[1],dec:a[2],m:a[3],i:a[4],f:a[5]}));
+
+/* ===== constellations : identifiant, nom, icône, couleur, histoire, étoiles, traits ===== */
+const CONS=[
+{id:'orion',name:'Orion',icon:'🏹',color:'#ffb37a',story:'Orion est un grand chasseur du ciel. Sa ceinture est formée de trois étoiles bien alignées, et il lève son arc vers les étoiles.',
+ stars:['Betelgeuse','Bellatrix','Alnilam','Alnitak','Mintaka','Rigel'],
+ lines:[['Betelgeuse','Bellatrix'],['Betelgeuse','Alnilam'],['Alnilam','Alnitak'],['Alnilam','Mintaka'],['Rigel','Mintaka'],['Betelgeuse','Rigel']]},
+{id:'grande_ourse',name:'Grande Ourse',icon:'🐻',color:'#8fd7ff',story:'La Grande Ourse ressemble à une immense casserole dans le ciel ! Ses sept étoiles dessinent le dos et la longue queue d’une maman ourse.',
+ stars:['Dubhe','Merak','Phecda','Megrez','Alioth','Mizar','Alkaid'],
+ lines:[['Dubhe','Merak'],['Merak','Phecda'],['Phecda','Megrez'],['Megrez','Dubhe'],['Megrez','Alioth'],['Alioth','Mizar'],['Mizar','Alkaid']]},
+{id:'petite_ourse',name:'Petite Ourse',icon:'🐻',color:'#c9b8ff',story:'La Petite Ourse suit toujours sa maman dans le ciel. Au bout de sa queue brille Polaris, l’étoile du Nord, qui ne bouge jamais toute la nuit.',
+ stars:['Polaris','Yildun','Kochab','Pherkad'],
+ lines:[['Polaris','Yildun'],['Yildun','Kochab'],['Kochab','Pherkad']]},
+{id:'cassiopee',name:'Cassiopée',icon:'👑',color:'#ffd86b',story:'Cassiopée est une reine assise sur son trône. Ses cinq étoiles dessinent un grand W scintillant tout en haut du ciel.',
+ stars:['Caph','Schedar','Gamma Cassiopée','Ruchbah','Segin'],
+ lines:[['Caph','Schedar'],['Schedar','Gamma Cassiopée'],['Gamma Cassiopée','Ruchbah'],['Ruchbah','Segin']]},
+{id:'scorpion',name:'Scorpion',icon:'🦂',color:'#ff8b8b',story:'Le Scorpion rampe tout en bas du ciel d’été. Son cœur rouge, Antarès, brille comme une braise, et sa queue se termine par un dard piquant.',
+ stars:['Dschubba','Antares','Shaula'],
+ lines:[['Dschubba','Antares'],['Antares','Shaula']]},
+{id:'lion',name:'Lion',icon:'🦁',color:'#ffcf6b',story:'Le Lion s’étire fièrement dans le ciel de printemps, de sa crinière jusqu’au bout de sa queue.',
+ stars:['Regulus','Denebola'],
+ lines:[['Regulus','Denebola']]},
+{id:'gemeaux',name:'Gémeaux',icon:'👯',color:'#9cffe0',story:'Castor et Pollux sont deux frères jumeaux qui brillent toujours côte à côte, comme s’ils se tenaient la main.',
+ stars:['Castor','Pollux'],
+ lines:[['Castor','Pollux']]},
+{id:'taureau',name:'Taureau',icon:'🐂',color:'#ffb37a',story:'Le Taureau baisse ses grandes cornes vers le ciel, avec Aldebaran, son œil orangé, qui brille au milieu du troupeau d’étoiles.',
+ stars:['Aldebaran','Elnath'],
+ lines:[['Aldebaran','Elnath']]}
+];
+
+const P=[['Mercure','Mercury','☿️','La planète la plus proche du Soleil.'],['Vénus','Venus','♀️','Très brillante, parfois appelée étoile du berger.'],['Mars','Mars','♂️','La planète rouge.'],['Jupiter','Jupiter','♃','La plus grande planète du Système solaire.'],['Saturne','Saturn','🪐','La planète aux magnifiques anneaux.']];
+
+/* ===== géométrie / astronomie ===== */
+function resize(){D=Math.min(devicePixelRatio||1,2);W=innerWidth;H=innerHeight;c.width=W*D;c.height=H*D;c.style.width=W+'px';c.style.height=H+'px';x.setTransform(D,0,0,D,0,0);fx.width=W*D;fx.height=H*D;fx.style.width=W+'px';fx.style.height=H+'px';fxx.setTransform(D,0,0,D,0,0);genBg()}
+addEventListener('resize',resize);
+function rad(v){return v*Math.PI/180}
+function deg(v){return v*180/Math.PI}
+function jd(d){return d.getTime()/86400000+2440587.5}
+function lst(d){let T=(jd(d)-2451545)/36525,g=280.46061837+360.98564736629*(jd(d)-2451545)+.000387933*T*T-T*T*T/38710000;return((g+lon)%360+360)%360}
+function aa(s,d){let H=((lst(d)/15-s.ra+24)%24)*15,r=rad(H),dc=rad(s.dec),la=rad(lat),alt=Math.asin(Math.sin(dc)*Math.sin(la)+Math.cos(dc)*Math.cos(la)*Math.cos(r)),az=Math.atan2(-Math.sin(r)*Math.cos(dc),Math.sin(dc)*Math.cos(la)-Math.cos(dc)*Math.sin(la)*Math.cos(r));return{alt:deg(alt),az:(deg(az)+360)%360}}
+function pos(az,alt){let a=az-(oriented?head:0),r=(90-alt)/90*Math.min(W,H)*.46*zoom;return{x:W/2+Math.sin(rad(a))*r,y:H/2-Math.cos(rad(a))*r}}
+function paa(body,d){try{let o=new Astronomy.Observer(lat,lon,hgt),q=Astronomy.Equator(body,d,o,true,true),h=Astronomy.Horizon(d,o,q.ra,q.dec,'normal');return{alt:h.altitude,az:h.azimuth,ra:q.ra,dec:q.dec,dist:q.dist}}catch(e){return null}}
+function illum(body,d){try{return Astronomy.Illumination(body,d)}catch(e){return null}}
+function moonPhaseInfo(d){let a=Astronomy.MoonPhase(d),map=['🌑 Nouvelle lune','🌒 Premier croissant','🌓 Premier quartier','🌔 Lune gibbeuse (croissante)','🌕 Pleine lune','🌖 Lune gibbeuse (décroissante)','🌗 Dernier quartier','🌘 Dernier croissant'];return{angle:a,label:map[Math.round(a/45)%8]}}
+function satPos(s,d){try{let q=satellite.propagate(s.satrec,d);if(!q.position)return null;let ecf=satellite.eciToEcf(q.position,satellite.gstime(d)),o={longitude:rad(lon),latitude:rad(lat),height:hgt/1000},z=satellite.ecfToLookAngles(o,ecf);return{az:deg(z.azimuth),alt:deg(z.elevation),range:z.rangeSat}}catch(e){return null}}
+
+/* ===== champ d'étoiles de fond (décor, non lié à de vraies coordonnées) ===== */
+let bg=[];
+function genBg(){bg=[];let n=Math.floor((W*H)/4200);for(let i=0;i<n;i++)bg.push({x:Math.random()*W,y:Math.random()*H,r:Math.random()*1.1+.2,tw:Math.random()*6.28,sp:.4+Math.random()*1.3,b:.12+Math.random()*.35})}
+
+/* ===== carnet de découvertes (persisté) ===== */
+function loadCarnet(){
+  let raw=localStorage.getItem('skyCarnet');
+  if(raw){try{return JSON.parse(raw)}catch(e){}}
+  let cnt={stars:[],planets:[],satellites:[],constellations:[],moon:[]};
+  try{
+    let old=JSON.parse(localStorage.getItem('skyBook')||'[]');
+    old.forEach(s=>{if(typeof s!=='string')return;if(s.indexOf('⭐')===0)cnt.stars.push(s.replace('⭐','').trim());else if(s.indexOf('🪐')===0)cnt.planets.push(s.replace('🪐','').trim());else if(s.indexOf('🛰️')===0)cnt.satellites.push(s.replace('🛰️','').trim())});
+  }catch(e){}
+  return cnt;
+}
+let carnet=loadCarnet();
+function saveCarnet(){localStorage.setItem('skyCarnet',JSON.stringify(carnet))}
+function addFound(cat,name){if(!carnet[cat].includes(name)){carnet[cat].push(name);saveCarnet();return true}return false}
+
+/* ===== mission du soir (générée automatiquement chaque jour) ===== */
+function todayKey(){return new Date().toISOString().slice(0,10)}
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+function buildMission(){let s=todayKey(),h=0;for(let i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))>>>0;let rnd=mulberry32(h);return{date:s,star:S[Math.floor(rnd()*S.length)].n,cons:CONS[Math.floor(rnd()*CONS.length)].id,foundStar:false,foundCons:false,foundMoon:false,foundSat:false,celebrated:false}}
+function loadMission(){let raw=localStorage.getItem('skyMission');if(raw){try{let m=JSON.parse(raw);if(m.date===todayKey())return m}catch(e){}}let m=buildMission();localStorage.setItem('skyMission',JSON.stringify(m));return m}
+let mission=loadMission();
+function saveMission(){localStorage.setItem('skyMission',JSON.stringify(mission))}
+function renderMission(){let cons=CONS.find(c=>c.id===mission.cons);document.getElementById('missionGrid').innerHTML=`<div class="mchip ${mission.foundStar?'found':''}">⭐ ${mission.star}${mission.foundStar?' ✓':''}</div><div class="mchip ${mission.foundCons?'found':''}">${cons.icon} ${cons.name}${mission.foundCons?' ✓':''}</div><div class="mchip ${mission.foundMoon?'found':''}">🌙 Lune${mission.foundMoon?' ✓':''}</div><div class="mchip ${mission.foundSat?'found':''}">🚀 ISS${mission.foundSat?' ✓':''}</div>`}
+function checkMissionComplete(){if(mission.foundStar&&mission.foundCons&&mission.foundMoon&&mission.foundSat&&!mission.celebrated){mission.celebrated=true;saveMission();burstConfetti(100);setTimeout(()=>burstConfetti(100),350);setTimeout(()=>card('🎉 Mission accomplie !','Bravo petit astronome ! Tu as trouvé les 4 trésors du ciel de ce soir. Reviens demain pour une nouvelle mission !',''),400)}}
+function checkConstellations(name){CONS.forEach(cst=>{if(cst.stars.includes(name)){let all=cst.stars.every(n=>carnet.stars.includes(n));if(all){let isNew=addFound('constellations',cst.id);if(isNew){toast(cst.icon+' Constellation dessinée : '+cst.name);burstConfetti(40);if(cst.id===mission.cons&&!mission.foundCons){mission.foundCons=true;saveMission();renderMission()}checkMissionComplete()}}}})}
+
+/* ===== confettis (canvas séparé, au-dessus de tout) ===== */
+let confetti=[];
+function burstConfetti(n){n=n||80;let colors=['#ffd86b','#7dffb2','#73caff','#ff8bcb','#ffffff'];for(let i=0;i<n;i++)confetti.push({x:W/2+(Math.random()-.5)*W*.7,y:-20-Math.random()*140,vx:(Math.random()-.5)*2.2,vy:2+Math.random()*3.2,r:3+Math.random()*4,col:colors[Math.floor(Math.random()*colors.length)],rot:Math.random()*6.28,vr:(Math.random()-.5)*.35,life:130+Math.random()*70})}
+function drawFx(){fxx.clearRect(0,0,W,H);confetti.forEach(p=>{p.x+=p.vx;p.y+=p.vy;p.vy+=.02;p.rot+=p.vr;p.life--;fxx.save();fxx.translate(p.x,p.y);fxx.rotate(p.rot);fxx.fillStyle=p.col;fxx.fillRect(-p.r,-p.r*.6,p.r*2,p.r*1.2);fxx.restore()});confetti=confetti.filter(p=>p.life>0&&p.y<H+40);requestAnimationFrame(drawFx)}
+
+/* ===== boucle de dessin du ciel ===== */
+function draw(){
+  x.clearRect(0,0,W,H);
+  let now=new Date(),t=now.getTime()/1000;
+  if(!arMode){
+    let g=x.createRadialGradient(W/2,H*.42,10,W/2,H*.42,Math.max(W,H)*.75);g.addColorStop(0,'#283d9122');g.addColorStop(1,'#0000');x.fillStyle=g;x.fillRect(0,0,W,H);
+    bg.forEach(s=>{let a=s.b+Math.sin(t*s.sp+s.tw)*.15;x.fillStyle=`rgba(255,255,255,${Math.max(0,Math.min(1,a))})`;x.fillRect(s.x,s.y,s.r*2,s.r*2)});
+  }
+  let pts=[];
+  S.forEach(s=>{let a=aa(s,now);if(a.alt>-4){let q=pos(a.az,a.alt);pts.push({...s,...a,...q})}});
+  x.lineWidth=1.3;
+  CONS.forEach(cst=>{x.strokeStyle=cst.color+'55';cst.lines.forEach(l=>{let A=pts.find(p=>p.n===l[0]),B=pts.find(p=>p.n===l[1]);if(A&&B){x.beginPath();x.moveTo(A.x,A.y);x.lineTo(B.x,B.y);x.stroke()}})});
+  pts.forEach(p=>{
+    let inCons=CONS.some(cst=>cst.stars.includes(p.n));
+    let z=Math.max(inCons?2.2:1.5,4.7-p.m*1.35);
+    x.beginPath();x.arc(p.x,p.y,z+5,0,7);x.fillStyle='#ffe27a0c';x.fill();
+    x.beginPath();x.arc(p.x,p.y,z,0,7);x.fillStyle=p.m<0?'#fff0a2':'#fff';x.shadowBlur=12;x.shadowColor='#fff';x.fill();x.shadowBlur=0;
+    if(p.m<1.2||inCons||p.n===mission.star){x.font='700 11px sans-serif';x.fillStyle='#ffffffc7';x.fillText(p.n,p.x+8,p.y-7)}
+  });
+  if(located){
+    P.forEach(p=>{let a=paa(p[1],now);if(a&&a.alt>-3){let q=pos(a.az,a.alt);x.beginPath();x.arc(q.x,q.y,8,0,7);x.fillStyle='#ffd86b';x.shadowBlur=18;x.shadowColor='#ffd86b';x.fill();x.shadowBlur=0;x.font='800 11px sans-serif';x.fillStyle='#fff';x.fillText(p[0],q.x+11,q.y+4)}});
+    let ma=paa('Moon',now);
+    if(ma&&ma.alt>-3){let q=pos(ma.az,ma.alt);x.beginPath();x.arc(q.x,q.y,11,0,7);x.fillStyle='#eef1ff';x.shadowBlur=22;x.shadowColor='#eef1ff';x.fill();x.shadowBlur=0;x.font='800 11px sans-serif';x.fillStyle='#fff';x.fillText('Lune',q.x+15,q.y+4)}
+  }
+  if(showSat&&satOK)sats.forEach(s=>{let a=satPos(s,now);if(a&&a.alt>-2){let q=pos(a.az,a.alt);x.beginPath();x.arc(q.x,q.y,4,0,7);x.fillStyle='#7dffb2';x.shadowBlur=15;x.shadowColor='#7dffb2';x.fill();x.shadowBlur=0;x.font='800 9px sans-serif';x.fillStyle='#9cffc3';x.fillText(s.name,q.x+7,q.y-5)}});
+  x.font='900 13px sans-serif';x.fillStyle='#ffffff8c';
+  [['N',0],['E',90],['S',180],['O',270]].forEach(a=>{let r=Math.min(W,H)*.42,v=a[1]-(oriented?head:0);x.fillText(a[0],W/2+Math.sin(rad(v))*r-4,H/2-Math.cos(rad(v))*r+5)});
+  requestAnimationFrame(draw);
+}
+
+/* ===== interface : carte, toast ===== */
+function toast(t){let e=document.getElementById('toast');e.textContent=t;e.classList.add('show');clearTimeout(window._t);window._t=setTimeout(()=>e.classList.remove('show'),2800)}
+function card(t,p,b){b=b||'';let el=document.getElementById('card');el.classList.toggle('explo',!astroMode);document.getElementById('title').textContent=t;document.getElementById('text').textContent=p;document.getElementById('body').innerHTML=b;el.classList.add('show');window.speech=p}
+function closeCard(){document.getElementById('card').classList.remove('show')}
+document.getElementById('close').onclick=closeCard;
+document.getElementById('close2').onclick=closeCard;
+document.getElementById('speak').onclick=()=>{if('speechSynthesis'in window){speechSynthesis.cancel();let u=new SpeechSynthesisUtterance(window.speech||'Bonjour petit astronome');u.lang='fr-FR';u.rate=.9;speechSynthesis.speak(u)}};
+
+/* ===== mode Petit Explorateur / Astronome ===== */
+function updateModeLabel(){document.getElementById('modeLabel').textContent=astroMode?'👨‍🚀 Astronome':'🧒 Explorateur'}
+updateModeLabel();
+function toggleMode(){astroMode=!astroMode;localStorage.setItem('skyAstro',astroMode?'1':'0');updateModeLabel();toast(astroMode?'👨‍🚀 Mode Astronome activé':'🧒 Mode Petit Explorateur activé');closeCard()}
+
+/* ===== mode nuit (préserve la vision nocturne) ===== */
+function applyNight(){document.body.classList.toggle('night',nightMode)}
+applyNight();
+function toggleNight(){nightMode=!nightMode;localStorage.setItem('skyNight',nightMode?'1':'0');applyNight();toast(nightMode?'🌗 Mode nuit activé':'☀️ Mode nuit désactivé');closeCard()}
+
+/* ===== plein écran ===== */
+function toggleFullscreen(){if(!document.fullscreenElement){document.documentElement.requestFullscreen&&document.documentElement.requestFullscreen().catch(()=>toast('Plein écran indisponible sur cet appareil.'))}else{document.exitFullscreen()}closeCard()}
+
+/* ===== réalité augmentée (caméra + ciel superposé) ===== */
+async function toggleAR(){
+  if(!arMode){
+    try{
+      camStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'},audio:false});
+      let v=document.getElementById('cam');v.srcObject=camStream;v.style.display='block';
+      arMode=true;document.body.classList.add('ar');
+      toast('🔭 Réalité augmentée activée ! Vise le ciel avec ta caméra.');
+    }catch(e){toast('Impossible d’accéder à la caméra.')}
+  }else{
+    if(camStream)camStream.getTracks().forEach(tr=>tr.stop());
+    document.getElementById('cam').style.display='none';
+    arMode=false;document.body.classList.remove('ar');
+    toast('🔭 Réalité augmentée désactivée');
+  }
+  closeCard();
+}
+
+/* ===== météo / qualité du ciel (Open-Meteo, sans clé) ===== */
+async function showWeather(){
+  if(!located){closeCard();return toast('📍 Active d’abord ta position.')}
+  card('☁️ Météo du ciel','Je regarde le ciel de ce soir…','');
+  try{
+    let r=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=cloud_cover,precipitation,wind_speed_10m&timezone=auto`,{cache:'no-store'});
+    let d=await r.json();
+    let cc=d.current.cloud_cover,rain=d.current.precipitation,wind=d.current.wind_speed_10m;
+    let mp=moonPhaseInfo(new Date()),moonBright=mp.angle>135&&mp.angle<225;
+    let rating,emoji,msg;
+    if(rain>0.2){rating='Pas top';emoji='🌧️';msg='Il pleut, on garde les étoiles pour un autre soir !'}
+    else if(cc<20){rating='Excellente';emoji='☀️';msg='Le ciel est bien dégagé, c’est parfait pour observer !'}
+    else if(cc<50){rating='Bonne';emoji='⛅';msg='Quelques nuages, mais on devrait bien voir les étoiles brillantes.'}
+    else if(cc<80){rating='Moyenne';emoji='☁️';msg='Le ciel est assez nuageux, ce sera plus difficile ce soir.'}
+    else{rating='Difficile';emoji='☁️';msg='Le ciel est très couvert, il vaudra mieux réessayer un autre soir.'}
+    let extra=moonBright?' La pleine lune éclaire aussi beaucoup le ciel ce soir.':'';
+    card(emoji+' Qualité du ciel : '+rating,msg+extra,`<span class="badge">☁️ ${Math.round(cc)}% de nuages</span><span class="badge">💨 ${Math.round(wind)} km/h</span>`);
+  }catch(e){card('☁️ Météo du ciel','Impossible de récupérer la météo pour le moment.','')}
+}
+
+/* ===== photo souvenir ===== */
+function takeSnapshot(){
+  let out=document.createElement('canvas');out.width=c.width;out.height=c.height;
+  let octx=out.getContext('2d');
+  if(arMode){let v=document.getElementById('cam');if(v&&v.readyState>=2)octx.drawImage(v,0,0,out.width,out.height)}
+  octx.drawImage(c,0,0);
+  octx.setTransform(D,0,0,D,0,0);
+  octx.textAlign='center';octx.shadowColor='#000';octx.shadowBlur=10;
+  octx.font='900 20px sans-serif';octx.fillStyle='#fff';octx.fillText('🌌 Petit Explorateur du Ciel',W/2,40);
+  octx.font='700 13px sans-serif';octx.fillStyle='#dfe6ff';octx.fillText(new Date().toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'}),W/2,62);
+  let url=out.toDataURL('image/png');
+  card('📸 Photo souvenir','Ton ciel de ce soir, prêt à garder en souvenir !',`<img src="${url}" style="width:100%;border-radius:16px;margin:8px 0;display:block"><a href="${url}" download="mon-ciel.png" style="text-decoration:none"><button class="primary" style="width:100%">💾 Télécharger la photo</button></a>`);
+}
+
+/* ===== menu Plus (réglages et fonctionnalités bonus) ===== */
+document.getElementById('moreBtn').onclick=()=>{
+  let html=`<div class="row"><button id="mMode"></button><button id="mNight"></button></div>
+<div class="row"><button id="mWeather">☁️ Météo du ciel</button><button id="mPhoto">📸 Souvenir</button></div>
+<div class="row"><button id="mAR"></button><button id="mFull">⛶ Plein écran</button></div>`;
+  card('⚙️ Plus d’options','Réglages et fonctionnalités bonus pour les grands (et les parents).',html);
+  document.getElementById('mMode').textContent=astroMode?'🧒 Mode Explorateur':'👨‍🚀 Mode Astronome';
+  document.getElementById('mMode').onclick=toggleMode;
+  document.getElementById('mNight').textContent=nightMode?'☀️ Désactiver la nuit':'🌗 Mode nuit';
+  document.getElementById('mNight').onclick=toggleNight;
+  document.getElementById('mWeather').onclick=showWeather;
+  document.getElementById('mPhoto').onclick=takeSnapshot;
+  document.getElementById('mAR').textContent=arMode?'🔭 Quitter la RA':'🔭 Réalité augmentée';
+  document.getElementById('mAR').onclick=toggleAR;
+  document.getElementById('mFull').onclick=toggleFullscreen;
+};
+
+/* ===== localisation et boussole ===== */
+document.getElementById('locate').onclick=()=>{
+  if(!navigator.geolocation)return toast('La localisation n’est pas disponible.');
+  toast('📍 Je cherche ta position…');
+  navigator.geolocation.getCurrentPosition(p=>{lat=p.coords.latitude;lon=p.coords.longitude;hgt=p.coords.altitude||0;located=true;toast('✨ Position trouvée !');renderMission();document.getElementById('mission').classList.add('show')},()=>toast('Autorise la localisation dans les réglages.'),{enableHighAccuracy:true,timeout:10000,maximumAge:60000});
+};
+async function compass(){try{if(typeof DeviceOrientationEvent!='undefined'&&typeof DeviceOrientationEvent.requestPermission=='function'){let p=await DeviceOrientationEvent.requestPermission();if(p!='granted')return toast('Autorise la boussole.')}addEventListener('deviceorientation',e=>{let h=e.webkitCompassHeading;if(typeof h!='number'&&e.alpha!=null)h=(360-e.alpha)%360;if(typeof h=='number'){head=h;oriented=true}},true);toast('🧭 Tourne doucement ton téléphone.')}catch(e){toast('Boussole indisponible.')}}
+document.getElementById('orient').onclick=compass;
+
+/* ===== planètes + Lune (liste) ===== */
+document.getElementById('planetsBtn').onclick=()=>{
+  if(!located)return toast('📍 Active d’abord ta position.');
+  let d=new Date(),html='',mp=moonPhaseInfo(d),ma=paa('Moon',d);
+  if(ma)html+=`<div class="item"><b>${mp.label.split(' ')[0]} La Lune</b><span>${mp.label}${astroMode?` • azimut ${ma.az.toFixed(0)}° • altitude ${ma.alt.toFixed(0)}°`:''}</span></div>`;
+  P.forEach(p=>{let a=paa(p[1],d);if(a){let im=astroMode?illum(p[1],d):null;html+=`<div class="item"><b>${p[2]} ${p[0]}</b><span>${a.alt>0?'Visible':'Sous l’horizon'}${astroMode?` • azimut ${a.az.toFixed(0)}° • altitude ${a.alt.toFixed(0)}°${im?` • magnitude ${im.mag.toFixed(1)}`:''}`:''}</span></div>`}});
+  card('🪐 Planètes & Lune','Positions calculées pour ton lieu et maintenant.',html);
+};
+
+/* ===== satellites =====
+   CelesTrak ne renvoie pas d'en-tête CORS pour les navigateurs : un fetch()
+   direct depuis un site hébergé ailleurs (ex. GitHub Pages) est bloqué.
+   On tente donc l'accès direct puis, en repli, plusieurs proxys CORS publics,
+   et enfin les dernières données mises en cache localement si tout échoue. */
+const SAT_SOURCES=['https://celestrak.org/NORAD/elements/gp.php?GROUP=stations&FORMAT=json','https://celestrak.org/NORAD/elements/gp.php?GROUP=visual&FORMAT=json'];
+function proxied(u,i){
+  if(i===0)return u;
+  if(i===1)return 'https://api.allorigins.win/raw?url='+encodeURIComponent(u);
+  if(i===2)return 'https://corsproxy.io/?url='+encodeURIComponent(u);
+  return 'https://api.codetabs.com/v1/proxy?quest='+encodeURIComponent(u);
+}
+async function fetchWithTimeout(u,ms){
+  let ctrl=new AbortController(),id=setTimeout(()=>ctrl.abort(),ms);
+  try{let r=await fetch(u,{cache:'no-store',signal:ctrl.signal});clearTimeout(id);return r}catch(e){clearTimeout(id);throw e}
+}
+async function fetchJSONResilient(u){
+  for(let i=0;i<4;i++){
+    try{let r=await fetchWithTimeout(proxied(u,i),7000);if(r.ok){let j=await r.json();if(Array.isArray(j)&&j.length)return j}}catch(e){}
+  }
+  return null;
+}
+function parseSats(list){
+  let seen=new Set();
+  return list.map(o=>{try{return{name:o.OBJECT_NAME||'Satellite',satrec:satellite.twoline2satrec(o.TLE_LINE1,o.TLE_LINE2)}}catch(e){return null}}).filter(Boolean).filter(o=>{if(seen.has(o.name))return false;seen.add(o.name);return true});
+}
+async function loadSat(){
+  if(satOK)return;
+  toast('🛰️ Je récupère les satellites…');
+  let all=[];
+  for(let u of SAT_SOURCES){let j=await fetchJSONResilient(u);if(j)all=all.concat(j)}
+  if(all.length){
+    sats=parseSats(all);satOK=sats.length>0;
+    if(satOK){try{localStorage.setItem('skySatCache',JSON.stringify({t:Date.now(),data:all}))}catch(e){}}
+    toast(satOK?`🛰️ ${sats.length} satellites chargés`:'Impossible de charger les satellites.');
+    return;
+  }
+  try{
+    let cache=JSON.parse(localStorage.getItem('skySatCache')||'null');
+    if(cache&&cache.data&&cache.data.length){
+      sats=parseSats(cache.data);satOK=sats.length>0;
+      toast(satOK?`🛰️ ${sats.length} satellites (dernières données connues)`:'Impossible de charger les satellites.');
+      return;
+    }
+  }catch(e){}
+  toast('Impossible de charger les satellites (vérifie ta connexion).');
+}
+document.getElementById('satBtn').onclick=async()=>{if(!located)return toast('📍 Active d’abord ta position.');await loadSat();showSat=true;if(satOK)card('🛰️ Satellites réels','Les points verts sont calculés à partir de données orbitales récentes. Touche un point vert pour découvrir le satellite !','')};
+
+/* ===== constellations (liste + progression) ===== */
+document.getElementById('consBtn').onclick=()=>{
+  let html=CONS.map(cst=>{let found=cst.stars.filter(n=>carnet.stars.includes(n)).length,done=carnet.constellations.includes(cst.id);return `<div class="item"><b>${cst.icon} ${cst.name}${done?' ✓':''}</b><span>${found}/${cst.stars.length} étoiles trouvées${done?' • constellation dessinée !':''}</span></div>`}).join('');
+  card('🐻 Les constellations','Touche les étoiles une par une pour dessiner chaque constellation et découvrir son histoire !',html);
+};
+
+/* ===== mission du soir (panneau) ===== */
+document.getElementById('missionBtn').onclick=()=>{
+  let panel=document.getElementById('mission');
+  if(panel.classList.contains('show')){panel.classList.remove('show');return}
+  renderMission();
+  panel.classList.add('show');
+};
+
+/* ===== carnet de l'explorateur ===== */
+document.getElementById('bookBtn').onclick=()=>{
+  let html=`<div class="item"><b>⭐ ${carnet.stars.length} étoile(s)</b><span>${carnet.stars.join(', ')||'Pars à la découverte !'}</span></div>
+<div class="item"><b>🐻 ${carnet.constellations.length} constellation(s)</b><span>${carnet.constellations.map(id=>{let cst=CONS.find(cc=>cc.id===id);return cst?cst.name:null}).filter(Boolean).join(', ')||'—'}</span></div>
+<div class="item"><b>🪐 ${carnet.planets.length} planète(s)</b><span>${carnet.planets.join(', ')||'—'}</span></div>
+<div class="item"><b>🛰️ ${carnet.satellites.length} satellite(s)</b><span>${carnet.satellites.join(', ')||'—'}</span></div>
+<div class="item"><b>🌙 ${carnet.moon.length} phase(s) de Lune</b><span>${carnet.moon.join(', ')||'—'}</span></div>`;
+  card('🏆 Mon carnet du ciel','Toutes tes découvertes sont gardées sur ce téléphone.',html);
+};
+
+/* ===== découvertes (étoile / planète / Lune / satellite) ===== */
+function onFoundStar(best){
+  let isNew=addFound('stars',best.n);
+  if(isNew)toast('🏆 Nouvelle découverte : '+best.n);
+  let badges=astroMode?`<span class="badge">magnitude ${best.m.toFixed(1)}</span><span class="badge">altitude ${best.alt.toFixed(0)}°</span><span class="badge">azimut ${best.az.toFixed(0)}°</span>`:'';
+  card(best.i+' '+best.n,best.f,badges);
+  if(best.n===mission.star&&!mission.foundStar){mission.foundStar=true;saveMission();renderMission();toast('🌟 Trésor du soir trouvé : '+best.n)}
+  checkConstellations(best.n);
+  checkMissionComplete();
+}
+function onFoundPlanet(p,a){
+  let isNew=addFound('planets',p[0]);
+  if(isNew)toast('🏆 Nouvelle découverte : '+p[0]);
+  let im=astroMode?illum(p[1],new Date()):null;
+  let badges=astroMode?`<span class="badge">altitude ${a.alt.toFixed(0)}°</span><span class="badge">azimut ${a.az.toFixed(0)}°</span>${im?`<span class="badge">magnitude ${im.mag.toFixed(1)}</span>`:''}`:'';
+  card(p[2]+' '+p[0],p[3],badges);
+}
+function onFoundMoon(d){
+  let mp=moonPhaseInfo(d);
+  let isNew=addFound('moon',mp.label);
+  if(isNew)toast('🏆 Nouvelle phase découverte !');
+  let im=astroMode?illum('Moon',d):null;
+  let badges=astroMode&&im?`<span class="badge">${Math.round(im.phase_fraction*100)}% éclairée</span>`:'';
+  card('🌙 La Lune','Ce soir, la Lune est en phase : '+mp.label+'.',badges);
+  if(!mission.foundMoon){mission.foundMoon=true;saveMission();renderMission();toast('🌙 Trésor du soir trouvé !')}
+  checkMissionComplete();
+}
+function onFoundSat(s,a){
+  let isNew=addFound('satellites',s.name);
+  if(isNew)toast('🏆 Nouvelle découverte : '+s.name);
+  let isISS=s.name.toUpperCase().includes('ISS');
+  let badges=astroMode?`<span class="badge">altitude ${a.alt.toFixed(0)}°</span><span class="badge">azimut ${a.az.toFixed(0)}°</span><span class="badge">${Math.round(a.range)} km</span>`:'';
+  card('🛰️ '+s.name,isISS?'Regarde ! La Station Spatiale Internationale passe au-dessus de nous !':'Un satellite artificiel qui vole autour de la Terre.',badges);
+  if(isISS&&!mission.foundSat){mission.foundSat=true;saveMission();renderMission();toast('🚀 Trésor du soir trouvé !')}
+  checkMissionComplete();
+}
+
+/* ===== interaction tactile sur le ciel : un doigt = sélectionner, deux doigts = zoomer ===== */
+function handleTap(cx,cy){
+  let d=new Date();
+  let best=null,bd=30;
+  S.forEach(s=>{let a=aa(s,d);if(a.alt>-4){let q=pos(a.az,a.alt),z=Math.hypot(q.x-cx,q.y-cy);if(z<bd){bd=z;best={...s,...a}}}});
+  if(best){onFoundStar(best);return}
+  if(located){
+    let bp=null,bd2=30;
+    P.forEach(p=>{let a=paa(p[1],d);if(a&&a.alt>-3){let q=pos(a.az,a.alt),z=Math.hypot(q.x-cx,q.y-cy);if(z<bd2){bd2=z;bp={p,a}}}});
+    if(bp){onFoundPlanet(bp.p,bp.a);return}
+    let ma=paa('Moon',d);
+    if(ma&&ma.alt>-3){let q=pos(ma.az,ma.alt);if(Math.hypot(q.x-cx,q.y-cy)<34){onFoundMoon(d);return}}
+  }
+  if(showSat&&satOK){
+    let bs=null,bd3=30;
+    sats.forEach(s=>{let a=satPos(s,d);if(a&&a.alt>-2){let q=pos(a.az,a.alt),z=Math.hypot(q.x-cx,q.y-cy);if(z<bd3){bd3=z;bs={s,a}}}});
+    if(bs)onFoundSat(bs.s,bs.a);
+  }
+}
+c.addEventListener('pointerdown',e=>{
+  pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(pointers.size===1){tapStart={x:e.clientX,y:e.clientY,id:e.pointerId,t:Date.now()}}
+  else if(pointers.size===2){tapStart=null;let pts=[...pointers.values()];pinch={startDist:Math.hypot(pts[0].x-pts[1].x,pts[0].y-pts[1].y),startZoom:zoom}}
+});
+c.addEventListener('pointermove',e=>{
+  if(!pointers.has(e.pointerId))return;
+  pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(pointers.size===2&&pinch){let pts=[...pointers.values()],dd=Math.hypot(pts[0].x-pts[1].x,pts[0].y-pts[1].y);zoom=Math.min(MAXZ,Math.max(MINZ,pinch.startZoom*(dd/pinch.startDist)))}
+});
+function endPointer(e){
+  if(pointers.size===1&&tapStart&&tapStart.id===e.pointerId){
+    let dist=Math.hypot(e.clientX-tapStart.x,e.clientY-tapStart.y),dt=Date.now()-tapStart.t;
+    if(dist<14&&dt<600)handleTap(e.clientX,e.clientY);
+  }
+  pointers.delete(e.pointerId);
+  if(pointers.size<2)pinch=null;
+  tapStart=null;
+}
+c.addEventListener('pointerup',endPointer);
+c.addEventListener('pointercancel',endPointer);
+document.getElementById('zoomIn').onclick=()=>{zoom=Math.min(MAXZ,zoom*1.25)};
+document.getElementById('zoomOut').onclick=()=>{zoom=Math.max(MINZ,zoom/1.25)};
+
+/* ===== horloge et démarrage ===== */
+function clock(){document.getElementById('clock').textContent=new Date().toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})}
+setInterval(clock,1000);clock();
+resize();draw();drawFx();
+setTimeout(()=>toast('🌌 Active 📍 Position pour commencer'),700);
+</script></body></html>
