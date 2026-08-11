@@ -47,7 +47,7 @@ button:active{transform:scale(.96)}
 #cross:after{height:1px;width:74px;left:-8px;top:29px}
 </style></head><body>
 <video id="cam" autoplay playsinline muted></video><canvas id="sky"></canvas><canvas id="fx"></canvas><div id="cross"></div>
-<div id="zoomCtl"><button id="zoomIn">➕</button><button id="zoomOut">➖</button></div>
+<div id="zoomCtl"><button id="zoomIn">➕</button><button id="zoomReset">⟲</button><button id="zoomOut">➖</button></div>
 <div class="top"><div class="brand">🌌 Petit Explorateur</div><div class="status">V3 • ciel réel<br><span id="modeLabel">🧒 Explorateur</span> • <span id="clock"></span></div></div>
 <div id="mission"><div class="missionTitle">🌙 Mission du soir</div><div class="missionText">4 trésors à trouver ce soir !</div><div class="missionGrid" id="missionGrid"></div></div>
 <div class="bottom">
@@ -71,8 +71,9 @@ let W,H,D=1,lat=43.3,lon=5.37,hgt=0,head=0,located=false,oriented=false,showSat=
 let astroMode=localStorage.getItem('skyAstro')==='1';
 let nightMode=localStorage.getItem('skyNight')==='1';
 let arMode=false,camStream=null;
-let zoom=1,MINZ=.6,MAXZ=3.2;
-let pointers=new Map(),pinch=null,tapStart=null;
+let zoom=1,MINZ=.6,MAXZ=3.2,panX=0,panY=0;
+let pointers=new Map(),pinch=null,tapStart=null,panStart=null;
+function clampPan(){let maxPan=Math.max(0,zoom-1)*Math.min(W,H)*.5;panX=Math.max(-maxPan,Math.min(maxPan,panX));panY=Math.max(-maxPan,Math.min(maxPan,panY));if(zoom<=1.02){panX=0;panY=0}}
 
 /* ===== catalogue d'étoiles réelles (nom, ra en heures, dec en degrés, magnitude, icône, description) ===== */
 const S=[
@@ -154,7 +155,7 @@ function deg(v){return v*180/Math.PI}
 function jd(d){return d.getTime()/86400000+2440587.5}
 function lst(d){let T=(jd(d)-2451545)/36525,g=280.46061837+360.98564736629*(jd(d)-2451545)+.000387933*T*T-T*T*T/38710000;return((g+lon)%360+360)%360}
 function aa(s,d){let H=((lst(d)/15-s.ra+24)%24)*15,r=rad(H),dc=rad(s.dec),la=rad(lat),alt=Math.asin(Math.sin(dc)*Math.sin(la)+Math.cos(dc)*Math.cos(la)*Math.cos(r)),az=Math.atan2(-Math.sin(r)*Math.cos(dc),Math.sin(dc)*Math.cos(la)-Math.cos(dc)*Math.sin(la)*Math.cos(r));return{alt:deg(alt),az:(deg(az)+360)%360}}
-function pos(az,alt){let a=az-(oriented?head:0),r=(90-alt)/90*Math.min(W,H)*.46*zoom;return{x:W/2+Math.sin(rad(a))*r,y:H/2-Math.cos(rad(a))*r}}
+function pos(az,alt){let a=az-(oriented?head:0),r=(90-alt)/90*Math.min(W,H)*.46*zoom;return{x:W/2+Math.sin(rad(a))*r+panX,y:H/2-Math.cos(rad(a))*r+panY}}
 function paa(body,d){try{let o=new Astronomy.Observer(lat,lon,hgt),q=Astronomy.Equator(body,d,o,true,true),h=Astronomy.Horizon(d,o,q.ra,q.dec,'normal');return{alt:h.altitude,az:h.azimuth,ra:q.ra,dec:q.dec,dist:q.dist}}catch(e){return null}}
 function illum(body,d){try{return Astronomy.Illumination(body,d)}catch(e){return null}}
 function moonPhaseInfo(d){let a=Astronomy.MoonPhase(d),map=['🌑 Nouvelle lune','🌒 Premier croissant','🌓 Premier quartier','🌔 Lune gibbeuse (croissante)','🌕 Pleine lune','🌖 Lune gibbeuse (décroissante)','🌗 Dernier quartier','🌘 Dernier croissant'];return{angle:a,label:map[Math.round(a/45)%8]}}
@@ -334,47 +335,57 @@ document.getElementById('planetsBtn').onclick=()=>{
 };
 
 /* ===== satellites =====
-   CelesTrak ne renvoie pas d'en-tête CORS pour les navigateurs : un fetch()
-   direct depuis un site hébergé ailleurs (ex. GitHub Pages) est bloqué.
-   On tente donc l'accès direct puis, en repli, plusieurs proxys CORS publics,
-   et enfin les dernières données mises en cache localement si tout échoue. */
-const SAT_SOURCES=['https://celestrak.org/NORAD/elements/gp.php?GROUP=stations&FORMAT=json','https://celestrak.org/NORAD/elements/gp.php?GROUP=visual&FORMAT=json'];
-function proxied(u,i){
-  if(i===0)return u;
-  if(i===1)return 'https://api.allorigins.win/raw?url='+encodeURIComponent(u);
-  if(i===2)return 'https://corsproxy.io/?url='+encodeURIComponent(u);
-  return 'https://api.codetabs.com/v1/proxy?quest='+encodeURIComponent(u);
+   CelesTrak bloque les proxys CORS publics via son robots.txt, donc la source
+   fiable pour l'ISS est désormais l'API dédiée wheretheiss.at (CORS ouvert,
+   sans clé, pensée pour un usage direct depuis un navigateur). Les autres
+   satellites visibles restent tentés en bonus via CelesTrak + proxys, en
+   parallèle et avec un délai court pour ne jamais bloquer longtemps. */
+function parseSats(list){
+  let seen=new Set();
+  return list.map(o=>{try{return{name:o.OBJECT_NAME||'Satellite',satrec:satellite.twoline2satrec(o.TLE_LINE1,o.TLE_LINE2)}}catch(e){return null}}).filter(Boolean).filter(o=>{if(seen.has(o.name))return false;seen.add(o.name);return true});
 }
 async function fetchWithTimeout(u,ms){
   let ctrl=new AbortController(),id=setTimeout(()=>ctrl.abort(),ms);
   try{let r=await fetch(u,{cache:'no-store',signal:ctrl.signal});clearTimeout(id);return r}catch(e){clearTimeout(id);throw e}
 }
-async function fetchJSONResilient(u){
-  for(let i=0;i<4;i++){
-    try{let r=await fetchWithTimeout(proxied(u,i),7000);if(r.ok){let j=await r.json();if(Array.isArray(j)&&j.length)return j}}catch(e){}
-  }
-  return null;
+async function fetchISS(){
+  try{
+    let r=await fetchWithTimeout('https://api.wheretheiss.at/v1/satellites/25544/tles?format=json',6000);
+    if(!r.ok)return null;
+    let d=await r.json();
+    if(!d.line1||!d.line2)return null;
+    return [{OBJECT_NAME:'ISS (ZARYA)',TLE_LINE1:d.line1,TLE_LINE2:d.line2}];
+  }catch(e){return null}
 }
-function parseSats(list){
-  let seen=new Set();
-  return list.map(o=>{try{return{name:o.OBJECT_NAME||'Satellite',satrec:satellite.twoline2satrec(o.TLE_LINE1,o.TLE_LINE2)}}catch(e){return null}}).filter(Boolean).filter(o=>{if(seen.has(o.name))return false;seen.add(o.name);return true});
+function proxied(u,i){
+  if(i===0)return u;
+  if(i===1)return 'https://api.allorigins.win/raw?url='+encodeURIComponent(u);
+  if(i===2)return 'https://api.codetabs.com/v1/proxy?quest='+encodeURIComponent(u);
+  return 'https://corsproxy.io/?url='+encodeURIComponent(u);
+}
+async function fetchExtra(u){
+  let attempts=[0,1,2,3].map(i=>fetchWithTimeout(proxied(u,i),6000).then(async r=>{if(!r.ok)throw 0;let j=await r.json();if(!Array.isArray(j)||!j.length)throw 0;return j}));
+  try{return await Promise.any(attempts)}catch(e){return null}
 }
 async function loadSat(){
   if(satOK)return;
   toast('🛰️ Je récupère les satellites…');
-  let all=[];
-  for(let u of SAT_SOURCES){let j=await fetchJSONResilient(u);if(j)all=all.concat(j)}
+  let all=await fetchISS()||[];
+  try{
+    let extra=await fetchExtra('https://celestrak.org/NORAD/elements/gp.php?GROUP=visual&FORMAT=json');
+    if(extra)all=all.concat(extra);
+  }catch(e){}
   if(all.length){
     sats=parseSats(all);satOK=sats.length>0;
     if(satOK){try{localStorage.setItem('skySatCache',JSON.stringify({t:Date.now(),data:all}))}catch(e){}}
-    toast(satOK?`🛰️ ${sats.length} satellites chargés`:'Impossible de charger les satellites.');
+    toast(satOK?`🛰️ ${sats.length} satellite(s) chargé(s)`:'Impossible de charger les satellites.');
     return;
   }
   try{
     let cache=JSON.parse(localStorage.getItem('skySatCache')||'null');
     if(cache&&cache.data&&cache.data.length){
       sats=parseSats(cache.data);satOK=sats.length>0;
-      toast(satOK?`🛰️ ${sats.length} satellites (dernières données connues)`:'Impossible de charger les satellites.');
+      toast(satOK?`🛰️ ${sats.length} satellite(s) (dernières données connues)`:'Impossible de charger les satellites.');
       return;
     }
   }catch(e){}
@@ -464,13 +475,26 @@ function handleTap(cx,cy){
 }
 c.addEventListener('pointerdown',e=>{
   pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
-  if(pointers.size===1){tapStart={x:e.clientX,y:e.clientY,id:e.pointerId,t:Date.now()}}
-  else if(pointers.size===2){tapStart=null;let pts=[...pointers.values()];pinch={startDist:Math.hypot(pts[0].x-pts[1].x,pts[0].y-pts[1].y),startZoom:zoom}}
+  if(pointers.size===1){
+    tapStart={x:e.clientX,y:e.clientY,id:e.pointerId,t:Date.now()};
+    panStart={x:e.clientX,y:e.clientY,panX0:panX,panY0:panY};
+  }else if(pointers.size===2){
+    tapStart=null;panStart=null;
+    let pts=[...pointers.values()];pinch={startDist:Math.hypot(pts[0].x-pts[1].x,pts[0].y-pts[1].y),startZoom:zoom};
+  }
 });
 c.addEventListener('pointermove',e=>{
   if(!pointers.has(e.pointerId))return;
   pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
-  if(pointers.size===2&&pinch){let pts=[...pointers.values()],dd=Math.hypot(pts[0].x-pts[1].x,pts[0].y-pts[1].y);zoom=Math.min(MAXZ,Math.max(MINZ,pinch.startZoom*(dd/pinch.startDist)))}
+  if(pointers.size===2&&pinch){
+    let pts=[...pointers.values()],dd=Math.hypot(pts[0].x-pts[1].x,pts[0].y-pts[1].y);
+    zoom=Math.min(MAXZ,Math.max(MINZ,pinch.startZoom*(dd/pinch.startDist)));
+    clampPan();
+  }else if(pointers.size===1&&panStart){
+    let dx=e.clientX-panStart.x,dy=e.clientY-panStart.y;
+    if(zoom>1.02){panX=panStart.panX0+dx;panY=panStart.panY0+dy;clampPan()}
+    if(tapStart&&Math.hypot(dx,dy)>14)tapStart=null;
+  }
 });
 function endPointer(e){
   if(pointers.size===1&&tapStart&&tapStart.id===e.pointerId){
@@ -479,12 +503,13 @@ function endPointer(e){
   }
   pointers.delete(e.pointerId);
   if(pointers.size<2)pinch=null;
-  tapStart=null;
+  tapStart=null;panStart=null;
 }
 c.addEventListener('pointerup',endPointer);
 c.addEventListener('pointercancel',endPointer);
-document.getElementById('zoomIn').onclick=()=>{zoom=Math.min(MAXZ,zoom*1.25)};
-document.getElementById('zoomOut').onclick=()=>{zoom=Math.max(MINZ,zoom/1.25)};
+document.getElementById('zoomIn').onclick=()=>{zoom=Math.min(MAXZ,zoom*1.25);clampPan()};
+document.getElementById('zoomOut').onclick=()=>{zoom=Math.max(MINZ,zoom/1.25);clampPan()};
+document.getElementById('zoomReset').onclick=()=>{zoom=1;panX=0;panY=0};
 
 /* ===== horloge et démarrage ===== */
 function clock(){document.getElementById('clock').textContent=new Date().toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})}
